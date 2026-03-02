@@ -156,11 +156,11 @@ class TrainingThread(threading.Thread):
                 if not os.path.exists(model_path):
                     socketio.emit('training_output', {
                         'data': f"❌ Model path not found: {model_path}\n"
-                    }, room=self.sid)
+                    })
                     socketio.emit('training_complete', {
                         'success': False,
                         'error': 'Model path not found'
-                    }, room=self.sid)
+                    })
                     return
                 model_name = model_path
             
@@ -250,10 +250,11 @@ class TrainingThread(threading.Thread):
                 })
                 
         except Exception as e:
+            print(f"❌ Error in training thread: {e}")
             socketio.emit('training_complete', {
                 'success': False,
                 'error': str(e)
-            }, room=self.sid)
+            })
     
     def generate_training_script(self, model_name):
         return f'''import os
@@ -267,7 +268,7 @@ import traceback
 
 class ProgressCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if state.is_local_process_zero and logs:
+        if logs:
             progress_data = {{
                 "step": state.global_step,
                 "max_steps": state.max_steps,
@@ -277,7 +278,8 @@ class ProgressCallback(TrainerCallback):
             }}
             if state.max_steps > 0:
                 progress_data["progress"] = round((state.global_step / state.max_steps) * 100, 2)
-            print(f"\\nPROGRESS_JSON: {{json.dumps(progress_data)}}", flush=True)
+            js_str = json.dumps(progress_data)
+            print(f"\\nPROGRESS_JSON: {{js_str}}", flush=True)
 
 try:
     # Configurare
@@ -355,8 +357,8 @@ try:
         else:
             text = f"### Instruction:\\n{{instruction}}\\n\\n### Response:\\n{{output}}{{EOS_TOKEN}}"
 
-        # Explicitly truncate text to avoid Dynamo batch size mismatches when input > max_seq_length
-        tokenized = tokenizer.encode(text, add_special_tokens=False, truncation=True, max_length=max_seq_length)
+        # Explicitly truncate text slightly below max_seq_length to avoid Dynamo batch size mismatches
+        tokenized = tokenizer.encode(text, add_special_tokens=False, truncation=True, max_length=max_seq_length - 4)
         text = tokenizer.decode(tokenized)
         
         return {{"text": text}}
@@ -486,10 +488,11 @@ class MergeThread(threading.Thread):
                 })
                 
         except Exception as e:
+            print(f"❌ Error in merge thread: {e}")
             socketio.emit('merge_complete', {
                 'success': False,
                 'error': str(e)
-            }, room=self.sid)
+            })
     
     def generate_merge_script(self):
         return f'''import os
