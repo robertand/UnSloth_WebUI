@@ -595,6 +595,7 @@
             loadFiles();
             loadOutputs();
             loadMergedModels();
+            loadLogs();
         });
         
         socket.on('connect_error', function(error) {
@@ -685,6 +686,26 @@
             line.textContent = text;
             console.appendChild(line);
             console.scrollTop = console.scrollHeight;
+        }
+
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+                if (data.logs && data.logs.length > 0) {
+                    const console = document.getElementById('console');
+                    // Only clear if "Ready to start" is there or empty
+                    if (console.children.length <= 1) {
+                        console.innerHTML = '';
+                    }
+                    data.logs.forEach(log => {
+                        // Simple check to avoid double-printing if we just connected
+                        addToConsole(log);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+            }
         }
         
         async function loadModels() {

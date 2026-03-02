@@ -193,30 +193,39 @@ class TrainingThread(threading.Thread):
                 cwd=WORK_DIR
             )
             
-            for line in self.process.stdout:
+            while True:
+                line = self.process.stdout.readline()
+                if not line and self.process.poll() is not None:
+                    break
+
+                if not line:
+                    continue
+
                 # Store in buffer
                 training_logs_buffer.append(line)
                 if len(training_logs_buffer) > MAX_LOG_BUFFER:
                     training_logs_buffer.pop(0)
 
+                # Robust parsing for PROGRESS_JSON, even if embedded in tqdm updates (\r)
                 if 'PROGRESS_JSON: ' in line:
-                    try:
-                        # Extract JSON part from the line (handles cases where tqdm output is on the same line)
-                        json_str = line.split('PROGRESS_JSON: ')[1].strip()
-                        progress_data = json.loads(json_str)
-                        # Broadcast to all clients to handle reconnections
-                        socketio.emit('training_progress', progress_data)
+                    # Split by \r to get the latest part if multiple tqdm updates are on one line
+                    parts = line.replace('\r', '\n').split('\n')
+                    for part in parts:
+                        if 'PROGRESS_JSON: ' in part:
+                            try:
+                                json_str = part.split('PROGRESS_JSON: ')[1].strip()
+                                progress_data = json.loads(json_str)
+                                socketio.emit('training_progress', progress_data)
 
-                        # Also send the non-JSON part to the console if it exists
-                        prefix = line.split('PROGRESS_JSON: ')[0].strip()
-                        if prefix:
-                            socketio.emit('training_output', {'data': prefix + '\n'})
-                    except Exception as e:
-                        print(f"Error parsing progress JSON: {e}")
-                        socketio.emit('training_output', {'data': line})
+                                # Send any prefix to the console
+                                prefix = part.split('PROGRESS_JSON: ')[0].strip()
+                                if prefix:
+                                    socketio.emit('training_output', {'data': prefix + '\n'})
+                            except Exception as e:
+                                print(f"Error parsing progress JSON: {e}")
+                        elif part.strip():
+                            socketio.emit('training_output', {'data': part + '\n'})
                 else:
-                    # Echo subprocess output to server console for debugging
-                    print(f"[Training {self.session_id}] {line.strip()}")
                     # Broadcast to all clients
                     socketio.emit('training_output', {'data': line})
             
@@ -268,7 +277,7 @@ class ProgressCallback(TrainerCallback):
             }}
             if state.max_steps > 0:
                 progress_data["progress"] = round((state.global_step / state.max_steps) * 100, 2)
-            print(f"PROGRESS_JSON: {{json.dumps(progress_data)}}", flush=True)
+            print(f"\nPROGRESS_JSON: {{json.dumps(progress_data)}}", flush=True)
 
 try:
     # Configurare
@@ -345,6 +354,10 @@ try:
             text = f"### Instruction:\\n{{instruction}}\\n\\n### Input:\\n{{input_text}}\\n\\n### Response:\\n{{output}}{{EOS_TOKEN}}"
         else:
             text = f"### Instruction:\\n{{instruction}}\\n\\n### Response:\\n{{output}}{{EOS_TOKEN}}"
+
+        # Explicitly truncate text to avoid Dynamo batch size mismatches when input > max_seq_length
+        tokenized = tokenizer.encode(text, add_special_tokens=False, truncation=True, max_length=max_seq_length)
+        text = tokenizer.decode(tokenized)
         
         return {{"text": text}}
 
