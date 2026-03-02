@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Unsloth WebUI - LLM Fine-tuning</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #334155;
+        }
+        
+        .card h2 {
+            color: #a5b4fc;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 10px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #475569;
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        
+        .upload-area:hover {
+            border-color: #818cf8;
+            background: #2d3a4f;
+        }
+        
+        .upload-area.dragover {
+            border-color: #6366f1;
+            background: #2d3a4f;
+        }
+        
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #334155;
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .file-name i {
+            color: #818cf8;
+        }
+        
+        .file-size {
+            color: #94a3b8;
+            font-size: 0.9em;
+        }
+        
+        .file-actions button {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        
+        .file-actions button:hover {
+            background: #ef444422;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #94a3b8;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 1em;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #818cf8;
+        }
+        
+        select.form-control {
+            cursor: pointer;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #6366f1;
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #4f52e6;
+            transform: translateY(-2px);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #334155;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            transition: width 0.3s;
+            width: 0%;
+        }
+        
+        .console {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #334155;
+        }
+        
+        .console-line {
+            color: #a5f3fc;
+            margin-bottom: 5px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .console-line.error {
+            color: #fca5a5;
+        }
+        
+        .console-line.success {
+            color: #86efac;
+        }
+        
+        .console-line.merge {
+            color: #fbbf24;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #334155;
+            padding-bottom: 10px;
+        }
+        
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+        
+        .tab.active {
+            background: #334155;
+            color: white;
+        }
+        
+        .model-info {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            background: #334155;
+            color: #e2e8f0;
+            margin-right: 5px;
+        }
+        
+        .badge-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .badge-warning {
+            background: #f59e0b;
+            color: white;
+        }
+        
+        .badge-info {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #334155;
+            border-radius: 50%;
+            border-top-color: #6366f1;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1e293b;
+            border-left: 4px solid #6366f1;
+            border-radius: 6px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 1000;
+            animation: slideIn 0.3s;
+        }
+        
+        .toast.error {
+            border-left-color: #ef4444;
+        }
+        
+        .toast.success {
+            border-left-color: #10b981;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .custom-model-form {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        
+        .status-bar {
+            margin-top: 15px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🦥 Unsloth WebUI</h1>
+            <div class="subtitle">Fine-tune LLMs 2x faster with 70% less VRAM</div>
+            <div class="status-bar">
+                <span class="badge" id="gpu-info">Loading GPU info...</span>
+                <span class="badge" id="working-dir">Working dir: {{ working_dir or 'Not set' }}</span>
+                <span class="badge" id="socketStatus" class="badge-warning">🔄 Connecting...</span>
+                <span class="badge" id="socketId" style="background: #3b82f6; display: none;"></span>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <!-- Left Column - Dataset Management -->
+            <div class="card">
+                <h2>📁 Dataset Management</h2>
+                
+                <div class="upload-area" id="dropZone">
+                    <input type="file" id="fileInput" multiple style="display: none;">
+                    <div style="font-size: 3em; color: #818cf8;">⬆️</div>
+                    <p>Drag & drop files here or click to upload</p>
+                    <p style="color: #94a3b8; font-size: 0.9em;">Supports: JSON, CSV, TXT, Parquet, ZIP</p>
+                </div>
+                
+                <div style="margin-bottom: 15px;">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="uploadProgress" class="form-control" placeholder="Upload progress..." readonly style="background: #0f172a;">
+                    </div>
+                    <div class="progress-bar" id="uploadProgressBar" style="display: none;">
+                        <div class="progress-fill" id="uploadProgressFill"></div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-bottom: 10px;">Uploaded Files</h3>
+                <div class="file-list" id="fileList">
+                    <div style="text-align: center; color: #94a3b8;">Loading files...</div>
+                </div>
+            </div>
+            
+            <!-- Right Column - Training Configuration -->
+            <div class="card">
+                <h2>⚙️ Training Configuration</h2>
+                
+                <div class="form-group">
+                    <label>Base Model</label>
+                    <select class="form-control" id="modelSelect">
+                        <option value="">Loading models...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Dataset File</label>
+                    <select class="form-control" id="datasetSelect">
+                        <option value="">Select a dataset...</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Output Name</label>
+                    <input type="text" class="form-control" id="outputName" value="fine_tuned_model" placeholder="fine_tuned_model">
+                </div>
+                
+                <div class="form-group">
+                    <label>Max Sequence Length</label>
+                    <input type="number" class="form-control" id="maxSeqLength" value="2048" min="128" max="8192">
+                </div>
+                
+                <div class="form-group">
+                    <label>Batch Size</label>
+                    <input type="number" class="form-control" id="batchSize" value="2" min="1" max="32">
+                </div>
+                
+                <div class="form-group">
+                    <label>Learning Rate</label>
+                    <input type="text" class="form-control" id="learningRate" value="2e-4">
+                </div>
+                
+                <div class="form-group">
+                    <label>Epochs</label>
+                    <input type="number" class="form-control" id="epochs" value="3" min="1" max="100">
+                </div>
+                
+                <div class="form-group">
+                    <label>LoRA Rank (r)</label>
+                    <input type="number" class="form-control" id="loraR" value="16" min="1" max="256">
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="load4bit" checked> Load in 4-bit (saves VRAM)
+                    </label>
+                </div>
+                
+                <button class="btn btn-primary" id="startTraining" style="width: 100%;" disabled>
+                    🚀 Start Training
+                </button>
+                
+                <div class="custom-model-form">
+                    <h3 style="color: #a5b4fc; margin-bottom: 10px;">➕ Add Custom Model</h3>
+                    <input type="text" id="customModelName" class="form-control" placeholder="Model name" style="margin-bottom: 10px;">
+                    <input type="text" id="customModelPath" class="form-control" placeholder="HuggingFace path or local path" style="margin-bottom: 10px;">
+                    <button class="btn btn-success" onclick="addCustomModel()" style="width: 100%;">Add Custom Model</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Training Progress -->
+        <div class="card" id="trainingProgressSection" style="margin-bottom: 25px; display: none;">
+            <h2>📈 Training Progress</h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                <div style="background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="color: #94a3b8; font-size: 0.9em;">Step</div>
+                    <div id="metricStep" style="font-size: 1.5em; font-weight: bold; color: #a5b4fc;">0 / 0</div>
+                </div>
+                <div style="background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="color: #94a3b8; font-size: 0.9em;">Epoch</div>
+                    <div id="metricEpoch" style="font-size: 1.5em; font-weight: bold; color: #a5b4fc;">0</div>
+                </div>
+                <div style="background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="color: #94a3b8; font-size: 0.9em;">Loss</div>
+                    <div id="metricLoss" style="font-size: 1.5em; font-weight: bold; color: #10b981;">0.0000</div>
+                </div>
+                <div style="background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                    <div style="color: #94a3b8; font-size: 0.9em;">Learning Rate</div>
+                    <div id="metricLR" style="font-size: 1.5em; font-weight: bold; color: #818cf8;">0.00e-0</div>
+                </div>
+            </div>
+            <div class="progress-bar" style="height: 25px;">
+                <div class="progress-fill" id="trainingProgressFill" style="width: 0%;"></div>
+            </div>
+            <div style="text-align: center; margin-top: 5px; color: #94a3b8;" id="trainingProgressText">0% Complete</div>
+        </div>
+
+        <!-- Training Console -->
+        <div class="card" style="margin-bottom: 25px;">
+            <h2>📟 Training Console</h2>
+            <div class="console" id="console">
+                <div class="console-line">Ready to start training...</div>
+            </div>
+        </div>
+        
+        <!-- Trained Models (LoRA) -->
+        <div class="card" style="margin-bottom: 25px;">
+            <h2>💾 Trained Models (LoRA)</h2>
+            <div id="outputsList">
+                <div style="text-align: center; color: #94a3b8;">Loading models...</div>
+            </div>
+        </div>
+        
+        <!-- Merged Models -->
+        <div class="card">
+            <h2>🔗 Merged Models (Base + LoRA)</h2>
+            <div id="mergedModelsList">
+                <div style="text-align: center; color: #94a3b8;">Loading merged models...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const socket = io({
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000
+        });
+        
+        let currentFiles = [];
+        let trainingActive = false;
+        let socketId = null;
+        
+        socket.on('connect', function() {
+            socketId = socket.id;
+            console.log('✅ Connected to server with ID:', socketId);
+            document.getElementById('socketStatus').textContent = `✅ Connected (${socketId.substring(0,8)}...)`;
+            document.getElementById('socketStatus').className = 'badge badge-success';
+            
+            // Încarcă datele
+            loadModels();
+            loadFiles();
+            loadOutputs();
+            loadMergedModels();
+        });
+        
+        socket.on('connect_error', function(error) {
+            console.error('❌ Socket connection error:', error);
+            document.getElementById('socketStatus').textContent = '❌ Connection failed';
+            document.getElementById('socketStatus').className = 'badge badge-danger';
+        });
+        
+        socket.on('disconnect', function(reason) {
+            console.log('🔌 Socket disconnected:', reason);
+            socketId = null;
+            document.getElementById('socketStatus').textContent = '⚠️ Disconnected';
+            document.getElementById('socketStatus').className = 'badge badge-warning';
+        });
+        
+        socket.on('reconnect', function(attemptNumber) {
+            console.log('🔄 Reconnected after', attemptNumber, 'attempts');
+            socketId = socket.id;
+        });
+        
+        socket.on('need_config', function() {
+            window.location.href = '/config';
+        });
+        
+        socket.on('training_output', function(data) {
+            addToConsole(data.data);
+        });
+        
+        socket.on('training_progress', function(data) {
+            document.getElementById('trainingProgressSection').style.display = 'block';
+            
+            if (data.progress !== undefined) {
+                document.getElementById('trainingProgressFill').style.width = data.progress + '%';
+                document.getElementById('trainingProgressText').textContent = data.progress + '% Complete';
+            }
+            
+            if (data.step !== undefined) {
+                document.getElementById('metricStep').textContent = data.step + ' / ' + data.max_steps;
+            }
+            
+            if (data.epoch !== undefined) {
+                document.getElementById('metricEpoch').textContent = data.epoch;
+            }
+            
+            if (data.loss !== undefined && data.loss !== null) {
+                document.getElementById('metricLoss').textContent = data.loss.toFixed(4);
+            }
+            
+            if (data.learning_rate !== undefined && data.learning_rate !== null) {
+                document.getElementById('metricLR').textContent = data.learning_rate.toExponential(2);
+            }
+        });
+        
+        socket.on('training_complete', function(data) {
+            trainingActive = false;
+            document.getElementById('startTraining').disabled = false;
+            
+            if (data.success) {
+                addToConsole('✅ Training completed successfully!', 'success');
+                loadOutputs();
+                showToast('Training completed successfully!', 'success');
+            } else {
+                addToConsole('❌ Training failed: ' + data.error, 'error');
+                showToast('Training failed: ' + data.error, 'error');
+            }
+        });
+        
+        socket.on('merge_output', function(data) {
+            addToConsole('🔄 ' + data.data, 'merge');
+        });
+        
+        socket.on('merge_complete', function(data) {
+            if (data.success) {
+                addToConsole('✅ Merge completed! Model saved to: ' + data.output_path, 'success');
+                loadMergedModels();
+                showToast('Merge completed successfully!', 'success');
+            } else {
+                addToConsole('❌ Merge failed: ' + data.error, 'error');
+                showToast('Merge failed: ' + data.error, 'error');
+            }
+        });
+        
+        function addToConsole(text, type = '') {
+            const console = document.getElementById('console');
+            const line = document.createElement('div');
+            line.className = 'console-line ' + type;
+            line.textContent = text;
+            console.appendChild(line);
+            console.scrollTop = console.scrollHeight;
+        }
+        
+        async function loadModels() {
+            try {
+                const response = await fetch('/api/models');
+                const models = await response.json();
+                const select = document.getElementById('modelSelect');
+                select.innerHTML = '';
+                
+                for (const [name, path] of Object.entries(models)) {
+                    const option = document.createElement('option');
+                    option.value = path;
+                    option.textContent = name;
+                    select.appendChild(option);
+                }
+                
+                checkTrainingReady();
+            } catch (error) {
+                console.error('Error loading models:', error);
+                showToast('Error loading models', 'error');
+            }
+        }
+        
+        async function loadFiles() {
+            try {
+                const response = await fetch('/api/files');
+                const files = await response.json();
+                currentFiles = files;
+                
+                const fileList = document.getElementById('fileList');
+                const datasetSelect = document.getElementById('datasetSelect');
+                
+                if (files.length === 0) {
+                    fileList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No files uploaded</div>';
+                    datasetSelect.innerHTML = '<option value="">No datasets available</option>';
+                    return;
+                }
+                
+                let fileHtml = '';
+                let datasetOptions = '<option value="">Select a dataset...</option>';
+                
+                files.forEach(file => {
+                    fileHtml += `
+                        <div class="file-item">
+                            <div class="file-name">
+                                <i>📄</i>
+                                <span>${file.name}</span>
+                                <span class="file-size">(${file.size_human})</span>
+                            </div>
+                            <div class="file-actions">
+                                <button onclick="deleteFile('${file.name}')">🗑️</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    if (file.name.match(/\.(json|csv|txt|parquet)$/)) {
+                        datasetOptions += `<option value="${file.name}">${file.name}</option>`;
+                    }
+                });
+                
+                fileList.innerHTML = fileHtml;
+                datasetSelect.innerHTML = datasetOptions;
+                
+                checkTrainingReady();
+            } catch (error) {
+                console.error('Error loading files:', error);
+                showToast('Error loading files', 'error');
+            }
+        }
+        
+        async function loadOutputs() {
+            try {
+                const response = await fetch('/api/trained_models');
+                const models = await response.json();
+                
+                const outputsList = document.getElementById('outputsList');
+                
+                if (models.length === 0) {
+                    outputsList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No trained models yet</div>';
+                    return;
+                }
+                
+                let html = '<div style="display: grid; gap: 15px;">';
+                
+                models.forEach(model => {
+                    html += `
+                        <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div>
+                                    <strong style="font-size: 1.2em; color: #a5b4fc;">${model.name}</strong>
+                                    <div style="color: #94a3b8; font-size: 0.9em; margin-top: 5px;">
+                                        <span class="badge">${model.size_human}</span>
+                                        <span class="badge">${model.created}</span>
+                                        ${model.has_lora ? '<span class="badge badge-success">LoRA</span>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                                <button class="btn btn-success" onclick="downloadModel('${model.name}')" style="flex: 1;">
+                                    ⬇️ Download LoRA
+                                </button>
+                                
+                                ${model.has_lora ? `
+                                    <button class="btn btn-primary" onclick="showMergeDialog('${model.name}')" style="flex: 1;">
+                                        🔗 Merge with Base
+                                    </button>
+                                ` : ''}
+                                
+                                <button class="btn btn-danger" onclick="deleteModel('${model.name}')" style="flex: 0 0 auto;">
+                                    🗑️
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                outputsList.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading models:', error);
+                outputsList.innerHTML = '<div style="text-align: center; color: #ef4444;">Error loading models</div>';
+            }
+        }
+        
+        async function loadMergedModels() {
+            try {
+                const response = await fetch('/api/merged_models');
+                const models = await response.json();
+                
+                const mergedList = document.getElementById('mergedModelsList');
+                
+                if (models.length === 0) {
+                    mergedList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No merged models yet</div>';
+                    return;
+                }
+                
+                let html = '<div style="display: grid; gap: 15px;">';
+                
+                models.forEach(model => {
+                    html += `
+                        <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #10b981;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div>
+                                    <strong style="font-size: 1.2em; color: #10b981;">${model.name}</strong>
+                                    <div style="color: #94a3b8; font-size: 0.9em; margin-top: 5px;">
+                                        <span class="badge">${model.size_human}</span>
+                                        <span class="badge">${model.created}</span>
+                                        <span class="badge badge-success">Ready for deployment</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn btn-success" onclick="downloadModel('${model.name}')" style="flex: 2;">
+                                    ⬇️ Download Merged Model
+                                </button>
+                                
+                                <button class="btn btn-danger" onclick="deleteModel('${model.name}')" style="flex: 0 0 auto;">
+                                    🗑️
+                                </button>
+                            </div>
+                            
+                            <div style="margin-top: 15px; display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                                <span style="color: #94a3b8;">Compatible with:</span>
+                                <span style="color: #818cf8;">🤗 Transformers</span>
+                                <span style="color: #818cf8;">🦙 Ollama</span>
+                                <span style="color: #818cf8;">⚡ vLLM</span>
+                                <span style="color: #818cf8;">📦 llama.cpp</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                mergedList.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error loading merged models:', error);
+                mergedList.innerHTML = '<div style="text-align: center; color: #ef4444;">Error loading merged models</div>';
+            }
+        }
+        
+        function checkTrainingReady() {
+            const modelSelected = document.getElementById('modelSelect').value;
+            const datasetSelected = document.getElementById('datasetSelect').value;
+            const startBtn = document.getElementById('startTraining');
+            
+            startBtn.disabled = !(modelSelected && datasetSelected && !trainingActive && socketId);
+        }
+        
+        // Drag & drop upload
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            uploadFiles(e.dataTransfer.files);
+        });
+        
+        fileInput.addEventListener('change', () => {
+            uploadFiles(fileInput.files);
+        });
+        
+        async function uploadFiles(files) {
+            const progressBar = document.getElementById('uploadProgressBar');
+            const progressFill = document.getElementById('uploadProgressFill');
+            const progressInput = document.getElementById('uploadProgress');
+            
+            progressBar.style.display = 'block';
+            
+            for (let file of files) {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                progressInput.value = `Uploading ${file.name}...`;
+                
+                try {
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        progressFill.style.width = '100%';
+                        setTimeout(() => {
+                            progressFill.style.width = '0%';
+                        }, 1000);
+                    }
+                } catch (error) {
+                    console.error('Upload error:', error);
+                    showToast('Upload failed: ' + error, 'error');
+                }
+            }
+            
+            progressBar.style.display = 'none';
+            progressInput.value = '';
+            loadFiles();
+        }
+        
+        async function deleteFile(filename) {
+            if (confirm(`Delete ${filename}?`)) {
+                try {
+                    const response = await fetch(`/api/delete_file/${filename}`);
+                    const result = await response.json();
+                    if (result.success) {
+                        loadFiles();
+                        showToast('File deleted', 'success');
+                    }
+                } catch (error) {
+                    console.error('Error deleting file:', error);
+                    showToast('Error deleting file', 'error');
+                }
+            }
+        }
+        
+        async function addCustomModel() {
+            const name = document.getElementById('customModelName').value;
+            const path = document.getElementById('customModelPath').value;
+            
+            if (!name || !path) {
+                showToast('Please enter both name and path', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/add_custom_model', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, path})
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showToast('Custom model added successfully', 'success');
+                    document.getElementById('customModelName').value = '';
+                    document.getElementById('customModelPath').value = '';
+                    loadModels();
+                } else {
+                    showToast('Error: ' + result.error, 'error');
+                }
+            } catch (error) {
+                console.error('Error adding custom model:', error);
+                showToast('Error adding custom model', 'error');
+            }
+        }
+        
+        document.getElementById('startTraining').addEventListener('click', async function() {
+            // Verifică dacă avem socket ID
+            if (!socketId) {
+                showToast('Socket not connected. Please wait or refresh the page.', 'error');
+                console.error('No socket ID available');
+                return;
+            }
+            
+            console.log('Current socket ID:', socketId);
+            
+            const config = {
+                model_name: document.getElementById('modelSelect').value,
+                dataset_file: document.getElementById('datasetSelect').value,
+                output_name: document.getElementById('outputName').value,
+                max_seq_length: parseInt(document.getElementById('maxSeqLength').value),
+                batch_size: parseInt(document.getElementById('batchSize').value),
+                learning_rate: parseFloat(document.getElementById('learningRate').value),
+                num_epochs: parseInt(document.getElementById('epochs').value),
+                lora_r: parseInt(document.getElementById('loraR').value),
+                load_in_4bit: document.getElementById('load4bit').checked,
+                socket_id: socketId
+            };
+            
+            console.log('🚀 Sending training request with config:', config);
+            
+            // Validare
+            if (!config.model_name || !config.dataset_file) {
+                showToast('Please select both model and dataset', 'error');
+                return;
+            }
+            
+            trainingActive = true;
+            this.disabled = true;
+            
+            // Reset progress
+            document.getElementById('trainingProgressSection').style.display = 'block';
+            document.getElementById('trainingProgressFill').style.width = '0%';
+            document.getElementById('trainingProgressText').textContent = '0% Complete';
+            document.getElementById('metricStep').textContent = '0 / 0';
+            document.getElementById('metricEpoch').textContent = '0';
+            document.getElementById('metricLoss').textContent = '0.0000';
+            document.getElementById('metricLR').textContent = '0.00e-0';
+
+            addToConsole('🚀 Starting training with config:', 'success');
+            addToConsole(JSON.stringify(config, null, 2));
+            
+            try {
+                const response = await fetch('/api/start_training', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                console.log('Server response:', result);
+                
+                if (result.success) {
+                    addToConsole('✅ Training started successfully! Session ID: ' + result.session_id, 'success');
+                    addToConsole('📁 Output directory: ' + result.output_dir, 'info');
+                    showToast('Training started', 'success');
+                } else {
+                    addToConsole('❌ Error: ' + (result.error || 'Unknown error'), 'error');
+                    showToast('Error: ' + (result.error || 'Unknown error'), 'error');
+                    trainingActive = false;
+                    this.disabled = false;
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                addToConsole('❌ Connection error: ' + error, 'error');
+                showToast('Connection error: ' + error, 'error');
+                trainingActive = false;
+                this.disabled = false;
+            }
+        });
+        
+        function downloadModel(modelName) {
+            window.location.href = `/api/download_model/${modelName}`;
+        }
+        
+        async function deleteModel(modelName) {
+            if (confirm(`Are you sure you want to delete ${modelName}?`)) {
+                try {
+                    const response = await fetch(`/api/delete_model/${modelName}`);
+                    const result = await response.json();
+                    if (result.success) {
+                        loadOutputs();
+                        loadMergedModels();
+                        showToast('Model deleted successfully', 'success');
+                    }
+                } catch (error) {
+                    console.error('Error deleting model:', error);
+                    showToast('Error deleting model', 'error');
+                }
+            }
+        }
+        
+        function showMergeDialog(modelName) {
+            if (!socketId) {
+                showToast('Socket not connected. Please wait.', 'error');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.8);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: #1e293b; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%;">
+                    <h3 style="color: #a5b4fc; margin-bottom: 20px;">Merge LoRA with Base Model</h3>
+                    <p style="color: #94a3b8; margin-bottom: 20px;">
+                        This will combine the trained LoRA adapters with the original base model to create a standalone model.
+                    </p>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; margin-bottom: 10px; color: #e2e8f0;">Merge Method:</label>
+                        
+                        <div style="margin-bottom: 15px;">
+                            <input type="radio" name="mergeMethod" id="method16bit" value="merged_16bit" checked>
+                            <label for="method16bit" style="margin-left: 8px; color: #94a3b8;">
+                                16-bit (Recommended) - Best quality, ~16GB for 7B model
+                            </label>
+                        </div>
+                        
+                        <div>
+                            <input type="radio" name="mergeMethod" id="method4bit" value="merged_4bit">
+                            <label for="method4bit" style="margin-left: 8px; color: #94a3b8;">
+                                4-bit - Smaller size, ~4GB for 7B model
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-primary" onclick="startMerge('${modelName}', this)" style="flex: 2;">
+                            Start Merge
+                        </button>
+                        <button class="btn" onclick="this.closest('div[style*=\\'fixed\\']').remove()" style="flex: 1; background: #475569;">
+                            Cancel
+                        </button>
+                    </div>
+                    
+                    <div id="mergeProgress" style="margin-top: 20px; display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%;" id="mergeProgressFill"></div>
+                        </div>
+                        <div style="text-align: center; margin-top: 10px; color: #94a3b8;" id="mergeStatus">Starting...</div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
+        function startMerge(modelName, button) {
+            if (!socketId) {
+                showToast('Socket not connected', 'error');
+                return;
+            }
+            
+            const method = document.querySelector('input[name="mergeMethod"]:checked').value;
+            const modal = button.closest('div[style*="fixed"]');
+            const progress = modal.querySelector('#mergeProgress');
+            const status = modal.querySelector('#mergeStatus');
+            const fill = modal.querySelector('#mergeProgressFill');
+            
+            progress.style.display = 'block';
+            button.disabled = true;
+            
+            fetch('/api/start_merge', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    trained_model: modelName,
+                    merge_method: method,
+                    socket_id: socketId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    status.textContent = 'Merge process started... Session: ' + data.session_id;
+                } else {
+                    status.textContent = '❌ Error: ' + data.error;
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                status.textContent = '❌ Error: ' + error;
+                button.disabled = false;
+            });
+        }
+        
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+        
+        // Check training ready on changes
+        document.getElementById('modelSelect').addEventListener('change', checkTrainingReady);
+        document.getElementById('datasetSelect').addEventListener('change', checkTrainingReady);
+        
+        // Load GPU info
+        fetch('/api/gpu_info')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('gpu-info').textContent = `GPU: ${data.gpu || 'N/A'} | VRAM: ${data.vram || 'N/A'}`;
+            })
+            .catch(() => {
+                document.getElementById('gpu-info').textContent = 'GPU: N/A | VRAM: N/A';
+            });
+    </script>
+</body>
+</html>
