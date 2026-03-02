@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import eventlet
+eventlet.monkey_patch()
+
 import os
 import json
 import threading
@@ -33,6 +36,9 @@ ALLOWED_EXTENSIONS = {'json', 'jsonl', 'csv', 'txt', 'parquet', 'zip'}
 
 # Dicționar pentru a stoca thread-urile active
 active_threads = {}
+# Buffer pentru ultimele log-uri de antrenare
+training_logs_buffer = []
+MAX_LOG_BUFFER = 500
 
 # Decorator pentru logging API
 def log_request(f):
@@ -165,10 +171,10 @@ class TrainingThread(threading.Thread):
             
             socketio.emit('training_output', {
                 'data': "🚀 Starting training with configuration:\n"
-            }, room=self.sid)
+            })
             socketio.emit('training_output', {
                 'data': json.dumps(self.config, indent=2) + "\n"
-            }, room=self.sid)
+            })
             
             # Rulează antrenarea
             env = os.environ.copy()
@@ -188,17 +194,31 @@ class TrainingThread(threading.Thread):
             )
             
             for line in self.process.stdout:
-                if line.startswith('PROGRESS_JSON: '):
+                # Store in buffer
+                training_logs_buffer.append(line)
+                if len(training_logs_buffer) > MAX_LOG_BUFFER:
+                    training_logs_buffer.pop(0)
+
+                if 'PROGRESS_JSON: ' in line:
                     try:
-                        progress_data = json.loads(line.replace('PROGRESS_JSON: ', ''))
-                        socketio.emit('training_progress', progress_data, room=self.sid)
+                        # Extract JSON part from the line (handles cases where tqdm output is on the same line)
+                        json_str = line.split('PROGRESS_JSON: ')[1].strip()
+                        progress_data = json.loads(json_str)
+                        # Broadcast to all clients to handle reconnections
+                        socketio.emit('training_progress', progress_data)
+
+                        # Also send the non-JSON part to the console if it exists
+                        prefix = line.split('PROGRESS_JSON: ')[0].strip()
+                        if prefix:
+                            socketio.emit('training_output', {'data': prefix + '\n'})
                     except Exception as e:
                         print(f"Error parsing progress JSON: {e}")
-                        socketio.emit('training_output', {'data': line}, room=self.sid)
+                        socketio.emit('training_output', {'data': line})
                 else:
                     # Echo subprocess output to server console for debugging
                     print(f"[Training {self.session_id}] {line.strip()}")
-                    socketio.emit('training_output', {'data': line}, room=self.sid)
+                    # Broadcast to all clients
+                    socketio.emit('training_output', {'data': line})
             
             self.process.wait()
             print(f"🏁 Training process finished with return code {self.process.returncode}")
@@ -213,12 +233,12 @@ class TrainingThread(threading.Thread):
                 socketio.emit('training_complete', {
                     'success': True,
                     'output_dir': self.config.get('output_dir', 'outputs/final_model')
-                }, room=self.sid)
+                })
             else:
                 socketio.emit('training_complete', {
                     'success': False,
                     'error': f'Training failed with return code {self.process.returncode}'
-                }, room=self.sid)
+                })
                 
         except Exception as e:
             socketio.emit('training_complete', {
@@ -410,7 +430,7 @@ class MergeThread(threading.Thread):
             
             socketio.emit('merge_output', {
                 'data': "🔄 Starting LoRA merge process...\n"
-            }, room=self.sid)
+            })
             
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
@@ -429,7 +449,8 @@ class MergeThread(threading.Thread):
             for line in self.process.stdout:
                 # Echo subprocess output to server console for debugging
                 print(f"[Merge {self.session_id}] {line.strip()}")
-                socketio.emit('merge_output', {'data': line}, room=self.sid)
+                # Broadcast to all clients
+                socketio.emit('merge_output', {'data': line})
             
             self.process.wait()
             print(f"🏁 Merge process finished with return code {self.process.returncode}")
@@ -444,12 +465,12 @@ class MergeThread(threading.Thread):
                 socketio.emit('merge_complete', {
                     'success': True,
                     'output_path': self.output_path
-                }, room=self.sid)
+                })
             else:
                 socketio.emit('merge_complete', {
                     'success': False,
                     'error': f'Merge failed with return code {self.process.returncode}'
-                }, room=self.sid)
+                })
                 
         except Exception as e:
             socketio.emit('merge_complete', {
@@ -547,7 +568,12 @@ def handle_connect():
     if not WORK_DIR:
         emit('need_config')
     else:
-        emit('connected', {'working_dir': WORK_DIR})
+        # Send current config and sid
+        emit('connected', {
+            'working_dir': WORK_DIR,
+            'sid': request.sid,
+            'active_training': any(t.is_alive() for t in active_threads.values())
+        })
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -839,7 +865,8 @@ def start_training():
     
     # Pornește thread-ul de antrenare
     thread = TrainingThread(socket_id, config)
-    thread.start()
+    # Folosește background task din SocketIO pentru o mai bună integrare
+    socketio.start_background_task(thread.run)
     active_threads[thread.session_id] = thread
     
     return jsonify({
@@ -886,7 +913,7 @@ def start_merge():
     output_path = os.path.join(get_work_path(MERGED_FOLDER), output_name)
     
     thread = MergeThread(socket_id, base_model, lora_path, output_path, merge_method)
-    thread.start()
+    socketio.start_background_task(thread.run)
     active_threads[thread.session_id] = thread
     
     return jsonify({'success': True, 'message': 'Merge started', 'session_id': thread.session_id})
@@ -984,6 +1011,14 @@ def training_status(session_id):
             return jsonify({'status': 'completed', 'session_id': session_id})
     return jsonify({'status': 'unknown', 'session_id': session_id})
 
+@app.route('/api/logs', methods=['GET'])
+def get_logs():
+    """Returnează ultimele log-uri din buffer"""
+    return jsonify({
+        'logs': training_logs_buffer,
+        'active_sessions': list(active_threads.keys())
+    })
+
 @app.route('/api/merge/status/<session_id>', methods=['GET'])
 @log_request
 def merge_status(session_id):
@@ -1050,6 +1085,6 @@ if __name__ == '__main__':
     print("🔧 Debug mode: ON (Reloader disabled to prevent restarts during training)")
     print("="*60 + "\n")
     
-    # use_reloader=False is important because training generates files in the working directory
-    # which can trigger the Flask reloader and kill the training process.
-    socketio.run(app, host='0.0.0.0', port=7862, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
+    # debug=False and use_reloader=False are important because training generates files
+    # in the working directory which can trigger the Flask reloader and kill the training process.
+    socketio.run(app, host='0.0.0.0', port=7862, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
