@@ -438,29 +438,73 @@
                     <input type="number" class="form-control" id="maxSeqLength" value="2048" min="128" max="8192">
                 </div>
                 
-                <div class="form-group">
-                    <label>Batch Size</label>
-                    <input type="number" class="form-control" id="batchSize" value="2" min="1" max="32">
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>Epochs</label>
+                        <input type="number" class="form-control" id="epochs" value="3" min="0" max="100">
+                    </div>
+                    <div>
+                        <label>Max Steps (0=epochs)</label>
+                        <input type="number" class="form-control" id="maxSteps" value="0" min="0">
+                    </div>
+                </div>
+
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>Batch Size</label>
+                        <input type="number" class="form-control" id="batchSize" value="2" min="1" max="32">
+                    </div>
+                    <div>
+                        <label>Grad. Accumulation</label>
+                        <input type="number" class="form-control" id="gradAccum" value="4" min="1" max="128">
+                    </div>
+                </div>
+
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>Learning Rate</label>
+                        <input type="text" class="form-control" id="learningRate" value="2e-4">
+                    </div>
+                    <div>
+                        <label>Optimizer</label>
+                        <select class="form-control" id="optimSelect">
+                            <option value="adamw_8bit">adamw_8bit</option>
+                            <option value="adamw_32bit">adamw_32bit</option>
+                            <option value="paged_adamw_8bit">paged_adamw_8bit</option>
+                            <option value="paged_adamw_32bit">paged_adamw_32bit</option>
+                            <option value="rmsprop">rmsprop</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>Warmup Steps</label>
+                        <input type="number" class="form-control" id="warmupSteps" value="5" min="0">
+                    </div>
+                    <div>
+                        <label>Save Steps</label>
+                        <input type="number" class="form-control" id="saveSteps" value="50" min="1">
+                    </div>
                 </div>
                 
-                <div class="form-group">
-                    <label>Learning Rate</label>
-                    <input type="text" class="form-control" id="learningRate" value="2e-4">
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>LoRA Rank (r)</label>
+                        <input type="number" class="form-control" id="loraR" value="16" min="1" max="256">
+                    </div>
+                    <div>
+                        <label>LoRA Alpha</label>
+                        <input type="number" class="form-control" id="loraAlpha" value="16" min="1" max="512">
+                    </div>
                 </div>
                 
-                <div class="form-group">
-                    <label>Epochs</label>
-                    <input type="number" class="form-control" id="epochs" value="3" min="1" max="100">
-                </div>
-                
-                <div class="form-group">
-                    <label>LoRA Rank (r)</label>
-                    <input type="number" class="form-control" id="loraR" value="16" min="1" max="256">
-                </div>
-                
-                <div class="form-group">
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <label>
-                        <input type="checkbox" id="load4bit" checked> Load in 4-bit (saves VRAM)
+                        <input type="checkbox" id="load4bit" checked> Load in 4-bit
+                    </label>
+                    <label>
+                        <input type="checkbox" id="packingToggle"> Packing
                     </label>
                 </div>
                 
@@ -551,6 +595,7 @@
             loadFiles();
             loadOutputs();
             loadMergedModels();
+            loadLogs();
         });
         
         socket.on('connect_error', function(error) {
@@ -562,8 +607,9 @@
         socket.on('disconnect', function(reason) {
             console.log('🔌 Socket disconnected:', reason);
             socketId = null;
-            document.getElementById('socketStatus').textContent = '⚠️ Disconnected';
+            document.getElementById('socketStatus').textContent = '⚠️ Disconnected: ' + reason;
             document.getElementById('socketStatus').className = 'badge badge-warning';
+            addToConsole('🔌 Socket disconnected: ' + reason, 'error');
         });
         
         socket.on('reconnect', function(attemptNumber) {
@@ -641,6 +687,26 @@
             console.appendChild(line);
             console.scrollTop = console.scrollHeight;
         }
+
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+                if (data.logs && data.logs.length > 0) {
+                    const console = document.getElementById('console');
+                    // Only clear if "Ready to start" is there or empty
+                    if (console.children.length <= 1) {
+                        console.innerHTML = '';
+                    }
+                    data.logs.forEach(log => {
+                        // Simple check to avoid double-printing if we just connected
+                        addToConsole(log);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+            }
+        }
         
         async function loadModels() {
             try {
@@ -695,7 +761,7 @@
                         </div>
                     `;
                     
-                    if (file.name.match(/\.(json|csv|txt|parquet)$/)) {
+                    if (file.name.match(/\.(json|jsonl|csv|txt|parquet)$/)) {
                         datasetOptions += `<option value="${file.name}">${file.name}</option>`;
                     }
                 });
@@ -952,6 +1018,7 @@
             }
             
             console.log('Current socket ID:', socketId);
+            addToConsole('🖱️ "Start Training" button clicked. Socket ID: ' + socketId);
             
             const config = {
                 model_name: document.getElementById('modelSelect').value,
@@ -961,12 +1028,20 @@
                 batch_size: parseInt(document.getElementById('batchSize').value),
                 learning_rate: parseFloat(document.getElementById('learningRate').value),
                 num_epochs: parseInt(document.getElementById('epochs').value),
+                max_steps: parseInt(document.getElementById('maxSteps').value),
+                warmup_steps: parseInt(document.getElementById('warmupSteps').value),
+                save_steps: parseInt(document.getElementById('saveSteps').value),
+                optim: document.getElementById('optimSelect').value,
+                packing: document.getElementById('packingToggle').checked,
+                gradient_accumulation: parseInt(document.getElementById('gradAccum').value),
                 lora_r: parseInt(document.getElementById('loraR').value),
+                lora_alpha: parseInt(document.getElementById('loraAlpha').value),
                 load_in_4bit: document.getElementById('load4bit').checked,
                 socket_id: socketId
             };
             
             console.log('🚀 Sending training request with config:', config);
+            addToConsole('📡 Sending API request to /api/start_training...');
             
             // Validare
             if (!config.model_name || !config.dataset_file) {
