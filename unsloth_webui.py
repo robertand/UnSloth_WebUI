@@ -817,7 +817,9 @@ def start_training():
         'batch_size': data.get('batch_size', 2),
         'learning_rate': data.get('learning_rate', 2e-4),
         'num_epochs': data.get('num_epochs', 3),
+        'gradient_accumulation': data.get('gradient_accumulation', 4),
         'lora_r': data.get('lora_r', 16),
+        'lora_alpha': data.get('lora_alpha', 16),
         'load_in_4bit': data.get('load_in_4bit', True),
     }
     
@@ -1031,7 +1033,9 @@ if __name__ == '__main__':
     print(f"🌐 Access at: http://localhost:7862")
     print(f"⚙️ Configure at: http://localhost:7862/config")
     print(f"🔍 Health check: http://localhost:7862/health")
-    print(f"🔧 Debug mode: ON")
+    print("🔧 Debug mode: ON (Reloader disabled to prevent restarts during training)")
     print("="*60 + "\n")
     
-    socketio.run(app, host='0.0.0.0', port=7862, debug=True, allow_unsafe_werkzeug=True)
+    # use_reloader=False is important because training generates files in the working directory
+    # which can trigger the Flask reloader and kill the training process.
+    socketio.run(app, host='0.0.0.0', port=7862, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

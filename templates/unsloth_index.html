@@ -448,14 +448,26 @@
                     <input type="text" class="form-control" id="learningRate" value="2e-4">
                 </div>
                 
-                <div class="form-group">
-                    <label>Epochs</label>
-                    <input type="number" class="form-control" id="epochs" value="3" min="1" max="100">
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>Epochs</label>
+                        <input type="number" class="form-control" id="epochs" value="3" min="1" max="100">
+                    </div>
+                    <div>
+                        <label>Grad. Accumulation</label>
+                        <input type="number" class="form-control" id="gradAccum" value="4" min="1" max="128">
+                    </div>
                 </div>
                 
-                <div class="form-group">
-                    <label>LoRA Rank (r)</label>
-                    <input type="number" class="form-control" id="loraR" value="16" min="1" max="256">
+                <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label>LoRA Rank (r)</label>
+                        <input type="number" class="form-control" id="loraR" value="16" min="1" max="256">
+                    </div>
+                    <div>
+                        <label>LoRA Alpha</label>
+                        <input type="number" class="form-control" id="loraAlpha" value="16" min="1" max="512">
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -562,8 +574,9 @@
         socket.on('disconnect', function(reason) {
             console.log('🔌 Socket disconnected:', reason);
             socketId = null;
-            document.getElementById('socketStatus').textContent = '⚠️ Disconnected';
+            document.getElementById('socketStatus').textContent = '⚠️ Disconnected: ' + reason;
             document.getElementById('socketStatus').className = 'badge badge-warning';
+            addToConsole('🔌 Socket disconnected: ' + reason, 'error');
         });
         
         socket.on('reconnect', function(attemptNumber) {
@@ -962,7 +975,9 @@
                 batch_size: parseInt(document.getElementById('batchSize').value),
                 learning_rate: parseFloat(document.getElementById('learningRate').value),
                 num_epochs: parseInt(document.getElementById('epochs').value),
+                gradient_accumulation: parseInt(document.getElementById('gradAccum').value),
                 lora_r: parseInt(document.getElementById('loraR').value),
+                lora_alpha: parseInt(document.getElementById('loraAlpha').value),
                 load_in_4bit: document.getElementById('load4bit').checked,
                 socket_id: socketId
             };
