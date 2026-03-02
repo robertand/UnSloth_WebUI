@@ -196,6 +196,8 @@ class TrainingThread(threading.Thread):
                         print(f"Error parsing progress JSON: {e}")
                         socketio.emit('training_output', {'data': line}, room=self.sid)
                 else:
+                    # Echo subprocess output to server console for debugging
+                    print(f"[Training {self.session_id}] {line.strip()}")
                     socketio.emit('training_output', {'data': line}, room=self.sid)
             
             self.process.wait()
@@ -259,14 +261,16 @@ try:
     gradient_accumulation = {self.config.get('gradient_accumulation', 4)}
     learning_rate = {self.config.get('learning_rate', 2e-4)}
     num_epochs = {self.config.get('num_epochs', 3)}
+    max_steps = {self.config.get('max_steps', 0)}
     warmup_steps = {self.config.get('warmup_steps', 5)}
     save_steps = {self.config.get('save_steps', 50)}
-    logging_steps = {self.config.get('logging_steps', 10)}
+    logging_steps = {self.config.get('logging_steps', 1)}
     lora_r = {self.config.get('lora_r', 16)}
     lora_alpha = {self.config.get('lora_alpha', 16)}
     lora_dropout = {self.config.get('lora_dropout', 0)}
     use_gradient_checkpointing = {self.config.get('use_gradient_checkpointing', True)}
     optim = "{self.config.get('optim', 'adamw_8bit')}"
+    packing = {self.config.get('packing', False)}
 
     print("🚀 Loading model...")
     try:
@@ -311,15 +315,16 @@ try:
         traceback.print_exc()
         raise
 
+    EOS_TOKEN = tokenizer.eos_token
     def format_prompt(example):
         instruction = example.get('instruction', '')
         input_text = example.get('input', '')
         output = example.get('output', '')
         
         if input_text:
-            text = f"### Instruction:\\n{{instruction}}\\n\\n### Input:\\n{{input_text}}\\n\\n### Response:\\n{{output}}"
+            text = f"### Instruction:\\n{{instruction}}\\n\\n### Input:\\n{{input_text}}\\n\\n### Response:\\n{{output}}{{EOS_TOKEN}}"
         else:
-            text = f"### Instruction:\\n{{instruction}}\\n\\n### Response:\\n{{output}}"
+            text = f"### Instruction:\\n{{instruction}}\\n\\n### Response:\\n{{output}}{{EOS_TOKEN}}"
         
         return {{"text": text}}
 
@@ -334,13 +339,14 @@ try:
         dataset_text_field="text",
         max_seq_length=max_seq_length,
         dataset_num_proc=4,
-        packing=True,
+        packing=packing,
         callbacks=[ProgressCallback()],
         args=TrainingArguments(
             per_device_train_batch_size=batch_size,
             gradient_accumulation_steps=gradient_accumulation,
             warmup_steps=warmup_steps,
-            num_train_epochs=num_epochs,
+            num_train_epochs=num_epochs if max_steps == 0 else 1,
+            max_steps=max_steps if max_steps > 0 else -1,
             learning_rate=learning_rate,
             fp16=not is_bfloat16_supported(),
             bf16=is_bfloat16_supported(),
@@ -421,6 +427,8 @@ class MergeThread(threading.Thread):
             )
             
             for line in self.process.stdout:
+                # Echo subprocess output to server console for debugging
+                print(f"[Merge {self.session_id}] {line.strip()}")
                 socketio.emit('merge_output', {'data': line}, room=self.sid)
             
             self.process.wait()
@@ -817,6 +825,12 @@ def start_training():
         'batch_size': data.get('batch_size', 2),
         'learning_rate': data.get('learning_rate', 2e-4),
         'num_epochs': data.get('num_epochs', 3),
+        'max_steps': data.get('max_steps', 0),
+        'warmup_steps': data.get('warmup_steps', 5),
+        'save_steps': data.get('save_steps', 50),
+        'logging_steps': data.get('logging_steps', 1),
+        'optim': data.get('optim', 'adamw_8bit'),
+        'packing': data.get('packing', False),
         'gradient_accumulation': data.get('gradient_accumulation', 4),
         'lora_r': data.get('lora_r', 16),
         'lora_alpha': data.get('lora_alpha', 16),
