@@ -277,7 +277,7 @@ class ProgressCallback(TrainerCallback):
             }}
             if state.max_steps > 0:
                 progress_data["progress"] = round((state.global_step / state.max_steps) * 100, 2)
-            print(f"\nPROGRESS_JSON: {{json.dumps(progress_data)}}", flush=True)
+            print(f"\\nPROGRESS_JSON: {{json.dumps(progress_data)}}", flush=True)
 
 try:
     # Configurare
