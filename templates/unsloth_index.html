@@ -695,7 +695,7 @@
                         </div>
                     `;
                     
-                    if (file.name.match(/\.(json|csv|txt|parquet)$/)) {
+                    if (file.name.match(/\.(json|jsonl|csv|txt|parquet)$/)) {
                         datasetOptions += `<option value="${file.name}">${file.name}</option>`;
                     }
                 });
@@ -952,6 +952,7 @@
             }
             
             console.log('Current socket ID:', socketId);
+            addToConsole('🖱️ "Start Training" button clicked. Socket ID: ' + socketId);
             
             const config = {
                 model_name: document.getElementById('modelSelect').value,
@@ -967,6 +968,7 @@
             };
             
             console.log('🚀 Sending training request with config:', config);
+            addToConsole('📡 Sending API request to /api/start_training...');
             
             // Validare
             if (!config.model_name || !config.dataset_file) {

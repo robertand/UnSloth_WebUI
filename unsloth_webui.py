@@ -29,7 +29,7 @@ MODELS_FOLDER = 'models'
 OUTPUT_FOLDER = 'outputs'
 MERGED_FOLDER = 'merged_models'
 CUSTOM_MODELS_FILE = 'custom_models.json'
-ALLOWED_EXTENSIONS = {'json', 'csv', 'txt', 'parquet', 'zip'}
+ALLOWED_EXTENSIONS = {'json', 'jsonl', 'csv', 'txt', 'parquet', 'zip'}
 
 # Dicționar pentru a stoca thread-urile active
 active_threads = {}
@@ -141,6 +141,7 @@ class TrainingThread(threading.Thread):
         self.session_id = str(int(time.time()))
         
     def run(self):
+        print(f"🧵 Training thread {self.session_id} started for SID {self.sid}")
         try:
             # Verifică dacă e model custom
             model_name = self.config['model_name']
@@ -175,6 +176,7 @@ class TrainingThread(threading.Thread):
             env['CUDA_VISIBLE_DEVICES'] = '0'
             env['SESSION_ID'] = self.session_id
             
+            print(f"🚀 Spawning training process: {sys.executable} {script_path}")
             self.process = subprocess.Popen(
                 [sys.executable, script_path],
                 stdout=subprocess.PIPE,
@@ -197,6 +199,7 @@ class TrainingThread(threading.Thread):
                     socketio.emit('training_output', {'data': line}, room=self.sid)
             
             self.process.wait()
+            print(f"🏁 Training process finished with return code {self.process.returncode}")
             
             # Curăță scriptul temporar
             try:
@@ -293,7 +296,7 @@ try:
 
     print("📚 Loading dataset...")
     try:
-        if dataset_path.endswith('.json'):
+        if dataset_path.endswith('.json') or dataset_path.endswith('.jsonl'):
             dataset = load_dataset('json', data_files=dataset_path, split='train')
         elif dataset_path.endswith('.csv'):
             dataset = load_dataset('csv', data_files=dataset_path, split='train')
@@ -393,6 +396,7 @@ class MergeThread(threading.Thread):
         self.session_id = str(int(time.time()))
         
     def run(self):
+        print(f"🧵 Merge thread {self.session_id} started for SID {self.sid}")
         try:
             script_path = os.path.join(WORK_DIR, f'merge_script_{self.session_id}.py')
             with open(script_path, 'w') as f:
@@ -405,6 +409,7 @@ class MergeThread(threading.Thread):
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
             
+            print(f"🚀 Spawning merge process: {sys.executable} {script_path}")
             self.process = subprocess.Popen(
                 [sys.executable, script_path],
                 stdout=subprocess.PIPE,
@@ -419,6 +424,7 @@ class MergeThread(threading.Thread):
                 socketio.emit('merge_output', {'data': line}, room=self.sid)
             
             self.process.wait()
+            print(f"🏁 Merge process finished with return code {self.process.returncode}")
             
             # Curăță scriptul temporar
             try:
