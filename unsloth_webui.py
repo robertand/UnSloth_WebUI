@@ -670,11 +670,14 @@ try:
         os.makedirs(output_path, exist_ok=True)
         
         if quantization != "none":
-            print(f"📦 Exporting as GGUF ({{quantization}})...")
+            print(f"📦 Starting GGUF export ({{quantization}})...")
+            print("⏳ This may take a few minutes depending on model size...")
             model.save_pretrained_gguf(output_path, tokenizer, quantization_method = quantization)
+            print("✅ GGUF export finished successfully")
         else:
-            print(f"🔄 Merging LoRA with base model...")
+            print(f"🔄 Starting LoRA merge ({{merge_method}})...")
             model.save_pretrained_merged(output_path, tokenizer, save_method = merge_method.replace("merged_", ""))
+            print("✅ HF merge finished successfully")
         
         if os.path.exists(os.path.join(lora_path, "training_config.json")):
             shutil.copy(
@@ -974,6 +977,11 @@ def start_inference():
 
     data = request.get_json(silent=True) or {}
     model_name = data.get('model_name')
+
+    # Handle custom models
+    if model_name and model_name.startswith('custom:'):
+        model_name = model_name.replace('custom:', '')
+
     lora_name = data.get('lora_name') # Optional
     messages = data.get('messages') # List of messages
     socket_id = data.get('socket_id')

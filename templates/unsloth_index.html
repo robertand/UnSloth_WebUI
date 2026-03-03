@@ -697,17 +697,49 @@
         
         socket.on('merge_output', function(data) {
             addToConsole('🔄 ' + data.data, 'merge');
+            const status = document.getElementById('mergeStatus');
+            const fill = document.getElementById('mergeProgressFill');
+            if (status && data.data.trim()) {
+                // Update small status text with last line of output
+                status.textContent = data.data.trim();
+            }
+            if (fill) {
+                // Fake some progress based on logs
+                const currentWidth = parseFloat(fill.style.width) || 0;
+                if (currentWidth < 90) {
+                    fill.style.width = (currentWidth + 1) + '%';
+                }
+            }
         });
         
         socket.on('merge_complete', function(data) {
+            const status = document.getElementById('mergeStatus');
+            const fill = document.getElementById('mergeProgressFill');
+            const submitBtn = document.getElementById('mergeSubmitBtn');
+            const cancelBtn = document.getElementById('mergeCancelBtn');
+
             if (data.success) {
                 addToConsole('✅ Merge completed! Model saved to: ' + data.output_path, 'success');
                 loadMergedModels();
                 showToast('Merge completed successfully!', 'success');
+
+                if (status) {
+                    status.textContent = '✅ Success! Model saved.';
+                    status.style.color = '#10b981';
+                }
+                if (fill) fill.style.width = '100%';
             } else {
                 addToConsole('❌ Merge failed: ' + data.error, 'error');
                 showToast('Merge failed: ' + data.error, 'error');
+
+                if (status) {
+                    status.textContent = '❌ Failed: ' + data.error;
+                    status.style.color = '#ef4444';
+                }
             }
+
+            if (submitBtn) submitBtn.disabled = false;
+            if (cancelBtn) cancelBtn.innerHTML = 'Close';
         });
 
         socket.on('inference_output', function(data) {
@@ -1335,24 +1367,29 @@
                             </label>
                         </div>
 
-                        <label style="display: block; margin-bottom: 10px; color: #e2e8f0;">Export as GGUF (Optional):</label>
-                        <select id="ggufQuant" class="form-control" style="background: #0f172a; color: #e2e8f0; border: 1px solid #334155;" onchange="updateMergeButtonText(this)">
-                            <option value="none">None (Standard HF Merge)</option>
-                            <option value="q4_k_m">q4_k_m (Recommended)</option>
-                            <option value="q5_k_m">q5_k_m</option>
-                            <option value="q8_0">q8_0</option>
-                            <option value="f16">f16</option>
-                        </select>
-                        <p style="font-size: 0.8em; color: #94a3b8; margin-top: 8px;">
-                            Choosing a quantization method will automatically merge the model and export it to GGUF format.
-                        </p>
+                        <div style="margin-top: 20px; padding: 15px; background: #0f172a; border-radius: 8px; border: 1px solid #334155;">
+                            <label style="display: flex; align-items: center; cursor: pointer; font-weight: bold; color: #a5b4fc;">
+                                <input type="checkbox" id="makeGguf" style="width: 20px; height: 20px; margin-right: 10px;" onchange="toggleGgufOptions(this)">
+                                🛠️ Make GGUF Model (Export for Ollama/llama.cpp)
+                            </label>
+
+                            <div id="ggufOptions" style="display: none; margin-top: 15px; padding-left: 30px;">
+                                <label style="display: block; font-size: 0.9em; margin-bottom: 8px; color: #94a3b8;">Quantization Method:</label>
+                                <select id="ggufQuant" class="form-control" style="background: #1e293b; color: #e2e8f0; border: 1px solid #334155;">
+                                    <option value="q4_k_m">q4_k_m (Recommended - Best balance)</option>
+                                    <option value="q5_k_m">q5_k_m (Better quality)</option>
+                                    <option value="q8_0">q8_0 (High quality)</option>
+                                    <option value="f16">f16 (Original quality - Large size)</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     
                     <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-primary" id="mergeSubmitBtn" onclick="startMerge('${modelName}', this)" style="flex: 2;">
+                        <button class="btn btn-primary" id="mergeSubmitBtn" onclick="startMerge('${modelName}', this)" style="flex: 2; height: 50px; font-size: 1.1em;">
                             🚀 Start Merge
                         </button>
-                        <button class="btn" onclick="this.closest('div[style*=\'fixed\']').remove()" style="flex: 1; background: #475569;">
+                        <button id="mergeCancelBtn" class="btn" onclick="this.closest('div[style*=\'fixed\']').remove()" style="flex: 1; background: #475569;">
                             Cancel
                         </button>
                     </div>
@@ -1369,12 +1406,17 @@
             document.body.appendChild(modal);
         }
         
-        function updateMergeButtonText(select) {
+        function toggleGgufOptions(checkbox) {
+            const options = document.getElementById('ggufOptions');
             const btn = document.getElementById('mergeSubmitBtn');
-            if (select.value === 'none') {
-                btn.innerHTML = '🚀 Start Merge';
-            } else {
+            options.style.display = checkbox.checked ? 'block' : 'none';
+
+            if (checkbox.checked) {
                 btn.innerHTML = '📦 Start Merge & Export GGUF';
+                btn.style.background = 'linear-gradient(90deg, #10b981, #3b82f6)';
+            } else {
+                btn.innerHTML = '🚀 Start Merge';
+                btn.style.background = '#6366f1';
             }
         }
 
@@ -1385,7 +1427,8 @@
             }
             
             const method = document.querySelector('input[name="mergeMethod"]:checked').value;
-            const quant = document.getElementById('ggufQuant').value;
+            const makeGguf = document.getElementById('makeGguf').checked;
+            const quant = makeGguf ? document.getElementById('ggufQuant').value : 'none';
             const modal = button.closest('div[style*="fixed"]');
             const progress = modal.querySelector('#mergeProgress');
             const status = modal.querySelector('#mergeStatus');
