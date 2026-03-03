@@ -49,7 +49,14 @@ def log_request(f):
         print(f"📡 API Request: {request.method} {request.path}")
         print(f"📦 Headers: {dict(request.headers)}")
         if request.method == 'POST':
-            print(f"📦 Data: {request.get_json()}")
+            try:
+                # Only try to log JSON if it's actually JSON, not multipart/form-data
+                if request.is_json:
+                    print(f"📦 Data: {request.get_json()}")
+                else:
+                    print(f"📦 Data: Non-JSON body (likely file upload)")
+            except:
+                print(f"📦 Data: [Error reading JSON data]")
         try:
             response = f(*args, **kwargs)
             print(f"✅ API Response: {request.path} - Status OK")
