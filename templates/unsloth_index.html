@@ -556,24 +556,33 @@
             </div>
         </div>
 
-        <!-- LoRA Inference Test -->
+        <!-- LoRA Chat Test -->
         <div class="card" style="margin-bottom: 25px;">
-            <h2>🤖 LoRA Inference Test</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px;">
+                <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">💬 LoRA Chat Test</h2>
+                <button class="btn btn-danger" onclick="clearChat()" style="padding: 5px 15px; font-size: 0.9em;">
+                    🧹 Clear Chat
+                </button>
+            </div>
+
             <div class="form-group">
                 <label>Select LoRA to test (optional)</label>
                 <select class="form-control" id="inferenceLoraSelect">
                     <option value="Base Model Only">Base Model Only</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label>Prompt</label>
-                <textarea class="form-control" id="inferencePrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
+
+            <div id="chatHistory" style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; height: 400px; overflow-y: auto; padding: 15px; margin-bottom: 20px;">
+                <div style="text-align: center; color: #94a3b8; margin-top: 150px;">
+                    Start a conversation with your model...
+                </div>
             </div>
-            <button class="btn btn-primary" id="runInference" style="width: 100%; margin-bottom: 15px;">
-                💬 Run Inference
-            </button>
-            <div class="console" id="inferenceConsole" style="height: 200px;">
-                <div class="console-line">Ready for inference...</div>
+
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <textarea class="form-control" id="inferencePrompt" rows="2" placeholder="Type your message here..." style="resize: none;"></textarea>
+                <button class="btn btn-primary" id="runInference" style="width: 120px; flex-shrink: 0;">
+                    🚀 Send
+                </button>
             </div>
         </div>
         
@@ -604,6 +613,7 @@
         let currentFiles = [];
         let trainingActive = false;
         let socketId = null;
+        let chatMessages = [];
         
         socket.on('connect', function() {
             socketId = socket.id;
@@ -701,30 +711,31 @@
         });
 
         socket.on('inference_output', function(data) {
-            const console = document.getElementById('inferenceConsole');
-            const line = document.createElement('div');
-            line.className = 'console-line';
-            line.textContent = data.data;
-            console.appendChild(line);
-            console.scrollTop = console.scrollHeight;
+            console.log('Inference log:', data.data);
         });
 
         socket.on('inference_token', function(data) {
-            const console = document.getElementById('inferenceConsole');
-            let lastLine = console.lastElementChild;
-            if (!lastLine || !lastLine.classList.contains('streaming-token')) {
-                lastLine = document.createElement('span');
-                lastLine.className = 'console-line streaming-token';
-                console.appendChild(lastLine);
+            const history = document.getElementById('chatHistory');
+            const lastMsg = history.lastElementChild;
+            if (lastMsg && lastMsg.classList.contains('assistant-message')) {
+                const content = lastMsg.querySelector('.message-content');
+                content.textContent += data.token;
+                history.scrollTop = history.scrollHeight;
             }
-            lastLine.textContent += data.token;
-            console.scrollTop = console.scrollHeight;
         });
 
         socket.on('inference_complete', function(data) {
             document.getElementById('runInference').disabled = false;
+            document.getElementById('inferencePrompt').disabled = false;
+            document.getElementById('inferencePrompt').focus();
+
             if (data.success) {
-                showToast('Inference complete', 'success');
+                const history = document.getElementById('chatHistory');
+                const lastMsg = history.lastElementChild;
+                if (lastMsg && lastMsg.classList.contains('assistant-message')) {
+                    const content = lastMsg.querySelector('.message-content').textContent;
+                    chatMessages.push({role: 'assistant', content: content});
+                }
             } else {
                 showToast('Inference failed: ' + data.error, 'error');
             }
@@ -1064,27 +1075,88 @@
             }
         }
         
+        function clearChat() {
+            chatMessages = [];
+            const history = document.getElementById('chatHistory');
+            history.innerHTML = '<div style="text-align: center; color: #94a3b8; margin-top: 150px;">Start a conversation with your model...</div>';
+        }
+
+        function appendMessage(role, content) {
+            const history = document.getElementById('chatHistory');
+
+            // Remove placeholder if it exists
+            if (history.querySelector('div[style*="margin-top: 150px"]')) {
+                history.innerHTML = '';
+            }
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${role}-message`;
+            msgDiv.style.cssText = `
+                margin-bottom: 15px;
+                padding: 10px 15px;
+                border-radius: 8px;
+                max-width: 85%;
+                ${role === 'user' ? 'background: #334155; margin-left: auto;' : 'background: #1e293b; border: 1px solid #334155;'}
+            `;
+
+            const roleSpan = document.createElement('div');
+            roleSpan.style.cssText = `
+                font-size: 0.8em;
+                color: ${role === 'user' ? '#a5b4fc' : '#10b981'};
+                margin-bottom: 5px;
+                font-weight: bold;
+                text-transform: uppercase;
+            `;
+            roleSpan.textContent = role;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.style.whiteSpace = 'pre-wrap';
+            contentDiv.textContent = content;
+
+            msgDiv.appendChild(roleSpan);
+            msgDiv.appendChild(contentDiv);
+            history.appendChild(msgDiv);
+            history.scrollTop = history.scrollHeight;
+            return msgDiv;
+        }
+
         document.getElementById('runInference').addEventListener('click', async function() {
+            const promptInput = document.getElementById('inferencePrompt');
+            const prompt = promptInput.value.trim();
+
             if (!socketId) {
                 showToast('Socket not connected', 'error');
                 return;
             }
 
-            const config = {
-                model_name: document.getElementById('modelSelect').value,
-                lora_name: document.getElementById('inferenceLoraSelect').value,
-                prompt: document.getElementById('inferencePrompt').value,
-                socket_id: socketId
-            };
+            if (!prompt) return;
 
-            if (!config.model_name || !config.prompt) {
-                showToast('Please select a model and enter a prompt', 'error');
+            const modelName = document.getElementById('modelSelect').value;
+            const loraName = document.getElementById('inferenceLoraSelect').value;
+
+            if (!modelName) {
+                showToast('Please select a base model first', 'error');
                 return;
             }
 
+            // UI Update
+            appendMessage('user', prompt);
+            chatMessages.push({role: 'user', content: prompt});
+            promptInput.value = '';
+
             this.disabled = true;
-            const console = document.getElementById('inferenceConsole');
-            console.innerHTML = '<div class="console-line">🚀 Starting inference...</div>';
+            promptInput.disabled = true;
+
+            // Prepare assistant message for streaming
+            appendMessage('assistant', '');
+
+            const config = {
+                model_name: modelName,
+                lora_name: loraName,
+                messages: chatMessages,
+                socket_id: socketId
+            };
 
             try {
                 const response = await fetch('/api/start_inference', {
@@ -1094,12 +1166,14 @@
                 });
                 const result = await response.json();
                 if (!result.success) {
-                    addToConsole('❌ Error: ' + result.error, 'error');
+                    showToast('Error: ' + result.error, 'error');
                     this.disabled = false;
+                    promptInput.disabled = false;
                 }
             } catch (error) {
                 showToast('Connection error: ' + error, 'error');
                 this.disabled = false;
+                promptInput.disabled = false;
             }
         });
 
@@ -1266,7 +1340,7 @@
                         <button class="btn btn-primary" onclick="startMerge('${modelName}', this)" style="flex: 2;">
                             Start Merge
                         </button>
-                        <button class="btn" onclick="this.closest('div[style*=\\'fixed\\']').remove()" style="flex: 1; background: #475569;">
+                        <button class="btn" onclick="this.closest('div[style*=\'fixed\']').remove()" style="flex: 1; background: #475569;">
                             Cancel
                         </button>
                     </div>

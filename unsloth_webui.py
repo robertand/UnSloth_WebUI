@@ -427,12 +427,12 @@ except Exception as e:
 '''
 
 class InferenceThread(threading.Thread):
-    def __init__(self, sid, model_name, lora_path, prompt, max_new_tokens=128):
+    def __init__(self, sid, model_name, lora_path, messages, max_new_tokens=256):
         threading.Thread.__init__(self)
         self.sid = sid
         self.model_name = model_name
         self.lora_path = lora_path
-        self.prompt = prompt
+        self.messages = messages # Expects a list of {"role": "user/assistant", "content": "..."}
         self.max_new_tokens = max_new_tokens
         self.daemon = True
         self.session_id = f"inf_{int(time.time())}"
@@ -478,16 +478,21 @@ class InferenceThread(threading.Thread):
                 socketio.emit('inference_complete', {'success': False, 'error': str(e)})
 
     def generate_inference_script(self):
+        # Escaping messages for inclusion in the script
+        import json
+        messages_json = json.dumps(self.messages)
+
         return f'''
 import torch
 from unsloth import FastLanguageModel
 from transformers import TextIteratorStreamer
 from threading import Thread
 import sys
+import json
 
 model_name = "{self.model_name}"
 lora_path = "{self.lora_path}"
-prompt = """{self.prompt}"""
+messages = json.loads("""{messages_json}""")
 
 try:
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -497,11 +502,28 @@ try:
     )
     FastLanguageModel.for_inference(model)
 
-    inputs = tokenizer([prompt], return_tensors = "pt").to("cuda")
+    # Use chat template if available, otherwise fallback to simple join
+    try:
+        inputs = tokenizer.apply_chat_template(
+            messages,
+            tokenize = True,
+            add_generation_prompt = True,
+            return_tensors = "pt",
+        ).to("cuda")
+    except Exception as e:
+        print(f"Warning: apply_chat_template failed: {{e}}. Using fallback formatting.")
+        prompt = ""
+        for msg in messages:
+            role = msg['role'].upper()
+            content = msg['content']
+            prompt += f"### {{role}}:\\n{{content}}\\n\\n"
+        prompt += "### ASSISTANT:\\n"
+        inputs = tokenizer([prompt], return_tensors = "pt").to("cuda")
+
     streamer = TextIteratorStreamer(tokenizer, skip_prompt = True, skip_special_tokens = True)
 
     generation_kwargs = dict(
-        inputs,
+        input_ids = inputs if torch.is_tensor(inputs) else inputs["input_ids"],
         streamer = streamer,
         max_new_tokens = {self.max_new_tokens},
         use_cache = True
@@ -514,7 +536,9 @@ try:
         print(f"TOKEN_OUTPUT: {{new_text}}", flush=True)
 
 except Exception as e:
+    import traceback
     print(f"Error: {{e}}")
+    traceback.print_exc()
     sys.exit(1)
 '''
 
@@ -931,11 +955,11 @@ def start_inference():
     data = request.get_json()
     model_name = data.get('model_name')
     lora_name = data.get('lora_name') # Optional
-    prompt = data.get('prompt')
+    messages = data.get('messages') # List of messages
     socket_id = data.get('socket_id')
 
-    if not prompt:
-        return jsonify({'error': 'No prompt provided'}), 400
+    if not messages:
+        return jsonify({'error': 'No messages provided'}), 400
 
     lora_path = None
     if lora_name and lora_name != "Base Model Only":
@@ -944,7 +968,7 @@ def start_inference():
             # Try direct path
             lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name)
 
-    thread = InferenceThread(socket_id, model_name, lora_path, prompt)
+    thread = InferenceThread(socket_id, model_name, lora_path, messages)
     socketio.start_background_task(thread.run)
     active_threads[thread.session_id] = thread
 
