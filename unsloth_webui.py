@@ -46,23 +46,28 @@ MAX_LOG_BUFFER = 500
 def log_request(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        print(f"📡 API Request: {request.method} {request.path}")
-        print(f"📦 Headers: {dict(request.headers)}")
-        if request.method == 'POST':
-            try:
-                # Only try to log JSON if it's actually JSON, not multipart/form-data
-                if request.is_json:
-                    print(f"📦 Data: {request.get_json()}")
-                else:
-                    print(f"📦 Data: Non-JSON body (likely file upload)")
-            except:
-                print(f"📦 Data: [Error reading JSON data]")
+        try:
+            print(f"📡 API Request: {request.method} {request.path}")
+            # Use repr to safely print non-ASCII headers
+            print(f"📦 Headers: {repr(dict(request.headers))}")
+            if request.method == 'POST':
+                try:
+                    # Only try to log JSON if it's actually JSON, not multipart/form-data
+                    if request.is_json:
+                        print(f"📦 Data: {repr(request.get_json())}")
+                    else:
+                        print(f"📦 Data: Non-JSON body (likely file upload)")
+                except:
+                    print(f"📦 Data: [Error reading JSON data]")
+        except Exception as e:
+            print(f"⚠️ Error in log_request prefix: {e}")
+
         try:
             response = f(*args, **kwargs)
             print(f"✅ API Response: {request.path} - Status OK")
             return response
         except Exception as e:
-            print(f"❌ API Error: {request.path} - {str(e)}")
+            print(f"❌ API Error: {request.path} - {repr(e)}")
             import traceback
             traceback.print_exc()
             return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
@@ -875,7 +880,7 @@ def list_merged_models():
 @log_request
 def upload_file():
     if request.method == 'OPTIONS':
-        return '', 200
+        return jsonify({'success': True}), 200
         
     if not WORK_DIR:
         return jsonify({'error': 'No working directory'}), 400
@@ -888,12 +893,16 @@ def upload_file():
         return jsonify({'error': 'No selected file'}), 400
     
     filename = secure_filename(file.filename)
+    if not filename:
+        # Fallback for filenames that are entirely non-ASCII and get stripped by secure_filename
+        filename = f"uploaded_file_{int(time.time())}.json"
+
     upload_path = get_work_path(UPLOAD_FOLDER)
     filepath = os.path.join(upload_path, filename)
     
     # Salvează fișierul
     file.save(filepath)
-    print(f"📁 File uploaded: {filename}")
+    print(f"📁 File uploaded: {repr(filename)}")
     
     # Dacă e zip, extrage
     if filename.endswith('.zip'):

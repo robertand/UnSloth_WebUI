@@ -1008,17 +1008,26 @@
                         body: formData
                     });
                     
-                    const result = await response.json();
+                    const text = await response.text();
+                    let result;
+                    try {
+                        result = JSON.parse(text);
+                    } catch (e) {
+                        console.error('Failed to parse upload response:', text);
+                        throw new Error(`Invalid server response: ${text.substring(0, 100)}`);
+                    }
                     
                     if (result.success) {
                         progressFill.style.width = '100%';
                         setTimeout(() => {
                             progressFill.style.width = '0%';
                         }, 1000);
+                    } else if (result.error) {
+                        throw new Error(result.error);
                     }
                 } catch (error) {
                     console.error('Upload error:', error);
-                    showToast('Upload failed: ' + error, 'error');
+                    showToast('Upload failed: ' + error.message, 'error');
                 }
             }
             
