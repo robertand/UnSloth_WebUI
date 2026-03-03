@@ -555,6 +555,27 @@
                 <div class="console-line">Ready to start training...</div>
             </div>
         </div>
+
+        <!-- LoRA Inference Test -->
+        <div class="card" style="margin-bottom: 25px;">
+            <h2>🤖 LoRA Inference Test</h2>
+            <div class="form-group">
+                <label>Select LoRA to test (optional)</label>
+                <select class="form-control" id="inferenceLoraSelect">
+                    <option value="Base Model Only">Base Model Only</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Prompt</label>
+                <textarea class="form-control" id="inferencePrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
+            </div>
+            <button class="btn btn-primary" id="runInference" style="width: 100%; margin-bottom: 15px;">
+                💬 Run Inference
+            </button>
+            <div class="console" id="inferenceConsole" style="height: 200px;">
+                <div class="console-line">Ready for inference...</div>
+            </div>
+        </div>
         
         <!-- Trained Models (LoRA) -->
         <div class="card" style="margin-bottom: 25px;">
@@ -678,6 +699,36 @@
                 showToast('Merge failed: ' + data.error, 'error');
             }
         });
+
+        socket.on('inference_output', function(data) {
+            const console = document.getElementById('inferenceConsole');
+            const line = document.createElement('div');
+            line.className = 'console-line';
+            line.textContent = data.data;
+            console.appendChild(line);
+            console.scrollTop = console.scrollHeight;
+        });
+
+        socket.on('inference_token', function(data) {
+            const console = document.getElementById('inferenceConsole');
+            let lastLine = console.lastElementChild;
+            if (!lastLine || !lastLine.classList.contains('streaming-token')) {
+                lastLine = document.createElement('span');
+                lastLine.className = 'console-line streaming-token';
+                console.appendChild(lastLine);
+            }
+            lastLine.textContent += data.token;
+            console.scrollTop = console.scrollHeight;
+        });
+
+        socket.on('inference_complete', function(data) {
+            document.getElementById('runInference').disabled = false;
+            if (data.success) {
+                showToast('Inference complete', 'success');
+            } else {
+                showToast('Inference failed: ' + data.error, 'error');
+            }
+        });
         
         function addToConsole(text, type = '') {
             const console = document.getElementById('console');
@@ -782,6 +833,7 @@
                 const models = await response.json();
                 
                 const outputsList = document.getElementById('outputsList');
+                const inferenceLoraSelect = document.getElementById('inferenceLoraSelect');
                 
                 if (models.length === 0) {
                     outputsList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No trained models yet</div>';
@@ -789,8 +841,10 @@
                 }
                 
                 let html = '<div style="display: grid; gap: 15px;">';
+                let loraOptions = '<option value="Base Model Only">Base Model Only</option>';
                 
                 models.forEach(model => {
+                    loraOptions += `<option value="${model.name}">${model.name}</option>`;
                     html += `
                         <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #334155;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -825,6 +879,7 @@
                 
                 html += '</div>';
                 outputsList.innerHTML = html;
+                inferenceLoraSelect.innerHTML = loraOptions;
                 
             } catch (error) {
                 console.error('Error loading models:', error);
@@ -1009,6 +1064,45 @@
             }
         }
         
+        document.getElementById('runInference').addEventListener('click', async function() {
+            if (!socketId) {
+                showToast('Socket not connected', 'error');
+                return;
+            }
+
+            const config = {
+                model_name: document.getElementById('modelSelect').value,
+                lora_name: document.getElementById('inferenceLoraSelect').value,
+                prompt: document.getElementById('inferencePrompt').value,
+                socket_id: socketId
+            };
+
+            if (!config.model_name || !config.prompt) {
+                showToast('Please select a model and enter a prompt', 'error');
+                return;
+            }
+
+            this.disabled = true;
+            const console = document.getElementById('inferenceConsole');
+            console.innerHTML = '<div class="console-line">🚀 Starting inference...</div>';
+
+            try {
+                const response = await fetch('/api/start_inference', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    addToConsole('❌ Error: ' + result.error, 'error');
+                    this.disabled = false;
+                }
+            } catch (error) {
+                showToast('Connection error: ' + error, 'error');
+                this.disabled = false;
+            }
+        });
+
         document.getElementById('startTraining').addEventListener('click', async function() {
             // Verifică dacă avem socket ID
             if (!socketId) {
@@ -1144,19 +1238,28 @@
                     <div style="margin-bottom: 20px;">
                         <label style="display: block; margin-bottom: 10px; color: #e2e8f0;">Merge Method:</label>
                         
-                        <div style="margin-bottom: 15px;">
+                        <div style="margin-bottom: 10px;">
                             <input type="radio" name="mergeMethod" id="method16bit" value="merged_16bit" checked>
                             <label for="method16bit" style="margin-left: 8px; color: #94a3b8;">
-                                16-bit (Recommended) - Best quality, ~16GB for 7B model
+                                16-bit (Recommended)
                             </label>
                         </div>
                         
-                        <div>
+                        <div style="margin-bottom: 15px;">
                             <input type="radio" name="mergeMethod" id="method4bit" value="merged_4bit">
                             <label for="method4bit" style="margin-left: 8px; color: #94a3b8;">
-                                4-bit - Smaller size, ~4GB for 7B model
+                                4-bit (Smaller size)
                             </label>
                         </div>
+
+                        <label style="display: block; margin-bottom: 10px; color: #e2e8f0;">Export as GGUF (Optional):</label>
+                        <select id="ggufQuant" class="form-control" style="background: #0f172a; color: #e2e8f0; border: 1px solid #334155;">
+                            <option value="none">None (Standard HF Merge)</option>
+                            <option value="q4_k_m">q4_k_m (Recommended)</option>
+                            <option value="q5_k_m">q5_k_m</option>
+                            <option value="q8_0">q8_0</option>
+                            <option value="f16">f16</option>
+                        </select>
                     </div>
                     
                     <div style="display: flex; gap: 10px;">
@@ -1187,6 +1290,7 @@
             }
             
             const method = document.querySelector('input[name="mergeMethod"]:checked').value;
+            const quant = document.getElementById('ggufQuant').value;
             const modal = button.closest('div[style*="fixed"]');
             const progress = modal.querySelector('#mergeProgress');
             const status = modal.querySelector('#mergeStatus');
@@ -1201,6 +1305,7 @@
                 body: JSON.stringify({
                     trained_model: modelName,
                     merge_method: method,
+                    quantization: quant,
                     socket_id: socketId
                 })
             })

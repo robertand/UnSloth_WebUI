@@ -36,6 +36,8 @@ ALLOWED_EXTENSIONS = {'json', 'jsonl', 'csv', 'txt', 'parquet', 'zip'}
 
 # Dicționar pentru a stoca thread-urile active
 active_threads = {}
+# Mutex for GPU access to prevent OOM
+gpu_lock = threading.Lock()
 # Buffer pentru ultimele log-uri de antrenare
 training_logs_buffer = []
 MAX_LOG_BUFFER = 500
@@ -424,81 +426,174 @@ except Exception as e:
     raise
 '''
 
+class InferenceThread(threading.Thread):
+    def __init__(self, sid, model_name, lora_path, prompt, max_new_tokens=128):
+        threading.Thread.__init__(self)
+        self.sid = sid
+        self.model_name = model_name
+        self.lora_path = lora_path
+        self.prompt = prompt
+        self.max_new_tokens = max_new_tokens
+        self.daemon = True
+        self.session_id = f"inf_{int(time.time())}"
+
+    def run(self):
+        with gpu_lock:
+            print(f"🧵 Inference thread {self.session_id} started for SID {self.sid}")
+            try:
+                socketio.emit('inference_output', {'data': "🚀 Loading model for inference...\n"})
+
+                # We use a subprocess for inference too to keep the main process stable and separate VRAM
+                script_path = os.path.join(WORK_DIR, f'inference_script_{self.session_id}.py')
+                with open(script_path, 'w') as f:
+                    f.write(self.generate_inference_script())
+
+                env = os.environ.copy()
+                env['PYTHONUNBUFFERED'] = '1'
+
+                process = subprocess.Popen(
+                    [sys.executable, script_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=1,
+                    universal_newlines=True,
+                    env=env,
+                    cwd=WORK_DIR
+                )
+
+                for line in process.stdout:
+                    if 'TOKEN_OUTPUT: ' in line:
+                        token = line.split('TOKEN_OUTPUT: ')[1].rstrip('\n')
+                        socketio.emit('inference_token', {'token': token})
+                    else:
+                        socketio.emit('inference_output', {'data': line})
+
+                process.wait()
+                os.remove(script_path)
+                socketio.emit('inference_complete', {'success': process.returncode == 0})
+
+            except Exception as e:
+                print(f"❌ Inference error: {e}")
+                socketio.emit('inference_output', {'data': f"\n❌ Error: {str(e)}\n"})
+                socketio.emit('inference_complete', {'success': False, 'error': str(e)})
+
+    def generate_inference_script(self):
+        return f'''
+import torch
+from unsloth import FastLanguageModel
+from transformers import TextIteratorStreamer
+from threading import Thread
+import sys
+
+model_name = "{self.model_name}"
+lora_path = "{self.lora_path}"
+prompt = """{self.prompt}"""
+
+try:
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name = lora_path if lora_path else model_name,
+        max_seq_length = 2048,
+        load_in_4bit = True,
+    )
+    FastLanguageModel.for_inference(model)
+
+    inputs = tokenizer([prompt], return_tensors = "pt").to("cuda")
+    streamer = TextIteratorStreamer(tokenizer, skip_prompt = True, skip_special_tokens = True)
+
+    generation_kwargs = dict(
+        inputs,
+        streamer = streamer,
+        max_new_tokens = {self.max_new_tokens},
+        use_cache = True
+    )
+
+    thread = Thread(target = model.generate, kwargs = generation_kwargs)
+    thread.start()
+
+    for new_text in streamer:
+        print(f"TOKEN_OUTPUT: {{new_text}}", flush=True)
+
+except Exception as e:
+    print(f"Error: {{e}}")
+    sys.exit(1)
+'''
+
 class MergeThread(threading.Thread):
-    def __init__(self, sid, base_model_path, lora_path, output_path, merge_method):
+    def __init__(self, sid, base_model_path, lora_path, output_path, merge_method, quantization="none"):
         threading.Thread.__init__(self)
         self.sid = sid
         self.base_model_path = base_model_path
         self.lora_path = lora_path
         self.output_path = output_path
         self.merge_method = merge_method
+        self.quantization = quantization
         self.daemon = True
         self.process = None
         self.session_id = str(int(time.time()))
         
     def run(self):
-        print(f"🧵 Merge thread {self.session_id} started for SID {self.sid}")
-        try:
-            script_path = os.path.join(WORK_DIR, f'merge_script_{self.session_id}.py')
-            with open(script_path, 'w') as f:
-                f.write(self.generate_merge_script())
-            
-            socketio.emit('merge_output', {
-                'data': "🔄 Starting LoRA merge process...\n"
-            })
-            
-            env = os.environ.copy()
-            env['PYTHONUNBUFFERED'] = '1'
-            
-            print(f"🚀 Spawning merge process: {sys.executable} {script_path}")
-            self.process = subprocess.Popen(
-                [sys.executable, script_path],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                bufsize=1,
-                universal_newlines=True,
-                env=env,
-                cwd=WORK_DIR
-            )
-            
-            for line in self.process.stdout:
-                # Echo subprocess output to server console for debugging
-                print(f"[Merge {self.session_id}] {line.strip()}")
-                # Broadcast to all clients
-                socketio.emit('merge_output', {'data': line})
-            
-            self.process.wait()
-            print(f"🏁 Merge process finished with return code {self.process.returncode}")
-            
-            # Curăță scriptul temporar
+        with gpu_lock:
+            print(f"🧵 Merge thread {self.session_id} started for SID {self.sid}")
             try:
-                os.remove(script_path)
-            except:
-                pass
+                script_path = os.path.join(WORK_DIR, f'merge_script_{self.session_id}.py')
+                with open(script_path, 'w') as f:
+                    f.write(self.generate_merge_script())
             
-            if self.process.returncode == 0:
-                socketio.emit('merge_complete', {
-                    'success': True,
-                    'output_path': self.output_path
+                socketio.emit('merge_output', {
+                    'data': "🔄 Starting LoRA merge process...\n"
                 })
-            else:
+
+                env = os.environ.copy()
+                env['PYTHONUNBUFFERED'] = '1'
+
+                print(f"🚀 Spawning merge process: {sys.executable} {script_path}")
+                self.process = subprocess.Popen(
+                    [sys.executable, script_path],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=1,
+                    universal_newlines=True,
+                    env=env,
+                    cwd=WORK_DIR
+                )
+
+                for line in self.process.stdout:
+                    # Echo subprocess output to server console for debugging
+                    print(f"[Merge {self.session_id}] {line.strip()}")
+                    # Broadcast to all clients
+                    socketio.emit('merge_output', {'data': line})
+
+                self.process.wait()
+                print(f"🏁 Merge process finished with return code {self.process.returncode}")
+
+                # Curăță scriptul temporar
+                try:
+                    os.remove(script_path)
+                except:
+                    pass
+
+                if self.process.returncode == 0:
+                    socketio.emit('merge_complete', {
+                        'success': True,
+                        'output_path': self.output_path
+                    })
+                else:
+                    socketio.emit('merge_complete', {
+                        'success': False,
+                        'error': f'Merge failed with return code {self.process.returncode}'
+                    })
+
+            except Exception as e:
+                print(f"❌ Error in merge thread: {e}")
                 socketio.emit('merge_complete', {
                     'success': False,
-                    'error': f'Merge failed with return code {self.process.returncode}'
+                    'error': str(e)
                 })
-                
-        except Exception as e:
-            print(f"❌ Error in merge thread: {e}")
-            socketio.emit('merge_complete', {
-                'success': False,
-                'error': str(e)
-            })
     
     def generate_merge_script(self):
         return f'''import os
 import torch
 from unsloth import FastLanguageModel
-from transformers import AutoTokenizer
 import shutil
 import json
 import traceback
@@ -509,40 +604,37 @@ try:
     lora_path = "{self.lora_path}"
     output_path = "{self.output_path}"
     merge_method = "{self.merge_method}"
+    quantization = "{self.quantization}"
 
     print(f"📂 Base model: {{base_model}}")
     print(f"📂 LoRA adapters: {{lora_path}}")
     print(f"📂 Output: {{output_path}}")
 
-    print("🚀 Loading base model and LoRA adapters...")
+    print("🚀 Loading model and LoRA adapters...")
     try:
+        # Load directly via Unsloth's from_pretrained which supports LoRA path
         model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=base_model,
+            model_name=lora_path if lora_path else base_model,
             max_seq_length=4096,
             load_in_4bit=(merge_method == "merged_4bit"),
             device_map="auto",
         )
-        print("✅ Base model loaded")
-        
-        from peft import PeftModel
-        model = PeftModel.from_pretrained(model, lora_path)
-        print("✅ LoRA adapters loaded")
+        print("✅ Model loaded")
         
     except Exception as e:
         print(f"❌ Error loading model: {{e}}")
         traceback.print_exc()
         raise
 
-    print(f"🔄 Merging LoRA with base model using method: {{merge_method}}...")
     try:
-        merged_model = model.merge_and_unload()
-        print("✅ Model merged successfully")
-        
-        print("💾 Saving merged model...")
         os.makedirs(output_path, exist_ok=True)
         
-        merged_model.save_pretrained(output_path)
-        tokenizer.save_pretrained(output_path)
+        if quantization != "none":
+            print(f"📦 Exporting as GGUF ({{quantization}})...")
+            model.save_pretrained_gguf(output_path, tokenizer, quantization_method = quantization)
+        else:
+            print(f"🔄 Merging LoRA with base model...")
+            model.save_pretrained_merged(output_path, tokenizer, save_method = merge_method.replace("merged_", ""))
         
         if os.path.exists(os.path.join(lora_path, "training_config.json")):
             shutil.copy(
@@ -830,6 +922,34 @@ def download_model(model_name):
         except:
             pass
 
+@app.route('/api/start_inference', methods=['POST'])
+@log_request
+def start_inference():
+    if not WORK_DIR:
+        return jsonify({'error': 'No working directory'}), 400
+
+    data = request.get_json()
+    model_name = data.get('model_name')
+    lora_name = data.get('lora_name') # Optional
+    prompt = data.get('prompt')
+    socket_id = data.get('socket_id')
+
+    if not prompt:
+        return jsonify({'error': 'No prompt provided'}), 400
+
+    lora_path = None
+    if lora_name and lora_name != "Base Model Only":
+        lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name, "lora_adapter")
+        if not os.path.exists(lora_path):
+            # Try direct path
+            lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name)
+
+    thread = InferenceThread(socket_id, model_name, lora_path, prompt)
+    socketio.start_background_task(thread.run)
+    active_threads[thread.session_id] = thread
+
+    return jsonify({'success': True, 'session_id': thread.session_id})
+
 @app.route('/api/start_training', methods=['POST'])
 @log_request
 def start_training():
@@ -881,6 +1001,14 @@ def start_training():
     
     # Pornește thread-ul de antrenare
     thread = TrainingThread(socket_id, config)
+
+    # Wrap run with gpu_lock
+    original_run = thread.run
+    def locked_run():
+        with gpu_lock:
+            original_run()
+    thread.run = locked_run
+
     # Folosește background task din SocketIO pentru o mai bună integrare
     socketio.start_background_task(thread.run)
     active_threads[thread.session_id] = thread
@@ -904,6 +1032,7 @@ def start_merge():
     socket_id = data.get('socket_id')
     trained_model = data.get('trained_model')
     merge_method = data.get('merge_method', 'merged_16bit')
+    quantization = data.get('quantization', 'none')
     
     print(f"🔌 Socket ID from request: {socket_id}")
     
@@ -928,7 +1057,7 @@ def start_merge():
     output_name = f"{trained_model}_merged_{timestamp}"
     output_path = os.path.join(get_work_path(MERGED_FOLDER), output_name)
     
-    thread = MergeThread(socket_id, base_model, lora_path, output_path, merge_method)
+    thread = MergeThread(socket_id, base_model, lora_path, output_path, merge_method, quantization)
     socketio.start_background_task(thread.run)
     active_threads[thread.session_id] = thread
     
