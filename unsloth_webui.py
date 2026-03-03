@@ -54,7 +54,7 @@ def log_request(f):
                 try:
                     # Only try to log JSON if it's actually JSON, not multipart/form-data
                     if request.is_json:
-                        print(f"📦 Data: {repr(request.get_json())}")
+                        print(f"📦 Data: {repr(request.get_json(silent=True))}")
                     else:
                         print(f"📦 Data: Non-JSON body (likely file upload)")
                 except:
@@ -490,9 +490,11 @@ class InferenceThread(threading.Thread):
                 socketio.emit('inference_complete', {'success': False, 'error': str(e)})
 
     def generate_inference_script(self):
-        # Escaping messages for inclusion in the script
+        # Using base64 to safely pass messages to the subprocess
         import json
+        import base64
         messages_json = json.dumps(self.messages)
+        messages_b64 = base64.b64encode(messages_json.encode('utf-8')).decode('utf-8')
 
         return f'''
 import torch
@@ -501,10 +503,12 @@ from transformers import TextIteratorStreamer
 from threading import Thread
 import sys
 import json
+import base64
 
 model_name = "{self.model_name}"
 lora_path = "{self.lora_path}"
-messages = json.loads("""{messages_json}""")
+messages_b64 = "{messages_b64}"
+messages = json.loads(base64.b64decode(messages_b64).decode('utf-8'))
 
 try:
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -757,7 +761,7 @@ def list_custom_models():
 @app.route('/api/add_custom_model', methods=['POST'])
 @log_request
 def add_custom_model():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('name')
     path_or_hf = data.get('path')
     
@@ -968,7 +972,7 @@ def start_inference():
     if not WORK_DIR:
         return jsonify({'error': 'No working directory'}), 400
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     model_name = data.get('model_name')
     lora_name = data.get('lora_name') # Optional
     messages = data.get('messages') # List of messages
@@ -996,7 +1000,7 @@ def start_training():
     if not WORK_DIR:
         return jsonify({'error': 'No working directory'}), 400
     
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     print(f"📦 Received training data: {json.dumps(data, indent=2)}")
     
     socket_id = data.get('socket_id')
@@ -1066,7 +1070,7 @@ def start_merge():
     if not WORK_DIR:
         return jsonify({'error': 'No working directory'}), 400
     
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     print(f"📦 Received merge data: {json.dumps(data, indent=2)}")
     
     socket_id = data.get('socket_id')
@@ -1143,7 +1147,7 @@ def delete_model(model_name):
 @log_request
 def api_set_working_dir():
     global WORK_DIR
-    data = request.json
+    data = request.get_json(silent=True) or {}
     wd = data.get('working_dir')
     
     if not wd:

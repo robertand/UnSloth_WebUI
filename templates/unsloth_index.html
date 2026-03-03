@@ -1336,18 +1336,21 @@
                         </div>
 
                         <label style="display: block; margin-bottom: 10px; color: #e2e8f0;">Export as GGUF (Optional):</label>
-                        <select id="ggufQuant" class="form-control" style="background: #0f172a; color: #e2e8f0; border: 1px solid #334155;">
+                        <select id="ggufQuant" class="form-control" style="background: #0f172a; color: #e2e8f0; border: 1px solid #334155;" onchange="updateMergeButtonText(this)">
                             <option value="none">None (Standard HF Merge)</option>
                             <option value="q4_k_m">q4_k_m (Recommended)</option>
                             <option value="q5_k_m">q5_k_m</option>
                             <option value="q8_0">q8_0</option>
                             <option value="f16">f16</option>
                         </select>
+                        <p style="font-size: 0.8em; color: #94a3b8; margin-top: 8px;">
+                            Choosing a quantization method will automatically merge the model and export it to GGUF format.
+                        </p>
                     </div>
                     
                     <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-primary" onclick="startMerge('${modelName}', this)" style="flex: 2;">
-                            Start Merge
+                        <button class="btn btn-primary" id="mergeSubmitBtn" onclick="startMerge('${modelName}', this)" style="flex: 2;">
+                            🚀 Start Merge
                         </button>
                         <button class="btn" onclick="this.closest('div[style*=\'fixed\']').remove()" style="flex: 1; background: #475569;">
                             Cancel
@@ -1366,6 +1369,15 @@
             document.body.appendChild(modal);
         }
         
+        function updateMergeButtonText(select) {
+            const btn = document.getElementById('mergeSubmitBtn');
+            if (select.value === 'none') {
+                btn.innerHTML = '🚀 Start Merge';
+            } else {
+                btn.innerHTML = '📦 Start Merge & Export GGUF';
+            }
+        }
+
         function startMerge(modelName, button) {
             if (!socketId) {
                 showToast('Socket not connected', 'error');
