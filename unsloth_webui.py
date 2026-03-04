@@ -1240,6 +1240,30 @@ def gpu_info():
     
     return jsonify({'gpu': 'N/A', 'vram': 'N/A'})
 
+@app.route('/api/check_deps', methods=['GET'])
+@log_request
+def check_deps():
+    """Verifică dependențele sistem pentru GGUF export"""
+    import subprocess
+
+    def check_pkg(name):
+        try:
+            # Check if package is installed on Debian/Ubuntu systems
+            result = subprocess.run(['dpkg', '-l', name], capture_output=True, text=True, timeout=2)
+            return 'ii' in result.stdout
+        except:
+            return False
+
+    deps = {
+        'cmake': shutil.which('cmake') is not None,
+        'gcc': shutil.which('gcc') is not None,
+        'g++': shutil.which('g++') is not None,
+        'make': shutil.which('make') is not None,
+        'build-essential': check_pkg('build-essential'),
+        'libgomp1': check_pkg('libgomp1')
+    }
+    return jsonify(deps)
+
 @app.route('/api/upload/progress', methods=['GET'])
 @log_request
 def upload_progress():
