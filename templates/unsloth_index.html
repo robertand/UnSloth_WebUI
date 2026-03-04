@@ -744,6 +744,14 @@
 
         socket.on('inference_output', function(data) {
             console.log('Inference log:', data.data);
+            const history = document.getElementById('chatHistory');
+            const lastMsg = history.lastElementChild;
+            if (lastMsg && lastMsg.classList.contains('assistant-message')) {
+                const content = lastMsg.querySelector('.message-content');
+                if (data.data.includes('🔍 Loading model') || data.data.includes('🚀 Starting generation')) {
+                    content.innerHTML = `<i style="color: #94a3b8;">${data.data.trim()}...</i>`;
+                }
+            }
         });
 
         socket.on('inference_token', function(data) {
@@ -751,6 +759,10 @@
             const lastMsg = history.lastElementChild;
             if (lastMsg && lastMsg.classList.contains('assistant-message')) {
                 const content = lastMsg.querySelector('.message-content');
+                // Clear the "Loading..." message on first token
+                if (content.querySelector('i')) {
+                    content.innerHTML = '';
+                }
                 content.textContent += data.token;
                 history.scrollTop = history.scrollHeight;
             }

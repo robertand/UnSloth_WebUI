@@ -161,8 +161,16 @@ class TrainingThread(threading.Thread):
         self.session_id = str(int(time.time()))
         
     def run(self):
-        print(f"🧵 Training thread {self.session_id} started for SID {self.sid}")
+        print(f"🧵 Training thread {self.session_id} waiting for GPU lock...")
+        with gpu_lock:
+            print(f"🧵 Training thread {self.session_id} acquired GPU lock. SID: {self.sid}")
+            self._do_run()
+
+    def _do_run(self):
         try:
+            # Switch to non-blocking and proper log capture
+            import sys
+
             # Verifică dacă e model custom
             model_name = self.config['model_name']
             if model_name.startswith('custom:'):
@@ -272,6 +280,7 @@ class TrainingThread(threading.Thread):
     
     def generate_training_script(self, model_name):
         return f'''import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
 from datasets import load_dataset
 from unsloth import FastLanguageModel, is_bfloat16_supported
@@ -450,8 +459,9 @@ class InferenceThread(threading.Thread):
         self.session_id = f"inf_{int(time.time())}"
 
     def run(self):
+        print(f"🧵 Inference thread {self.session_id} waiting for GPU lock...")
         with gpu_lock:
-            print(f"🧵 Inference thread {self.session_id} started for SID {self.sid}")
+            print(f"🧵 Inference thread {self.session_id} acquired GPU lock. SID: {self.sid}")
             try:
                 socketio.emit('inference_output', {'data': "🚀 Loading model for inference...\n"})
 
@@ -497,6 +507,8 @@ class InferenceThread(threading.Thread):
         messages_b64 = base64.b64encode(messages_json.encode('utf-8')).decode('utf-8')
 
         return f'''
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
 from unsloth import FastLanguageModel
 from transformers import TextIteratorStreamer
@@ -504,19 +516,29 @@ from threading import Thread
 import sys
 import json
 import base64
+import traceback
 
 model_name = "{self.model_name}"
 lora_path = "{self.lora_path}"
 messages_b64 = "{messages_b64}"
-messages = json.loads(base64.b64decode(messages_b64).decode('utf-8'))
 
 try:
+    print(f"🔍 Loading model: {{model_name}}", flush=True)
+    if lora_path:
+        print(f"📦 Loading LoRA adapters: {{lora_path}}", flush=True)
+
+    messages = json.loads(base64.b64decode(messages_b64).decode('utf-8'))
+
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = lora_path if lora_path else model_name,
         max_seq_length = 2048,
         load_in_4bit = True,
+        device_map = "auto",
     )
+
+    # Highly optimized inference settings
     FastLanguageModel.for_inference(model)
+    print("✅ Model loaded and optimized for inference.", flush=True)
 
     # Use chat template if available, otherwise fallback to simple join
     try:
@@ -526,8 +548,9 @@ try:
             add_generation_prompt = True,
             return_tensors = "pt",
         ).to("cuda")
+        print("📝 Chat template applied.", flush=True)
     except Exception as e:
-        print(f"Warning: apply_chat_template failed: {{e}}. Using fallback formatting.")
+        print(f"⚠️ Warning: apply_chat_template failed: {{e}}. Using fallback formatting.", flush=True)
         prompt = ""
         for msg in messages:
             role = msg['role'].upper()
@@ -542,18 +565,23 @@ try:
         input_ids = inputs if torch.is_tensor(inputs) else inputs["input_ids"],
         streamer = streamer,
         max_new_tokens = {self.max_new_tokens},
-        use_cache = True
+        use_cache = True,
+        # Standard unsloth optimizations for generation
+        temperature = 1.2,
+        min_p = 0.1,
     )
 
+    print("🚀 Starting generation...", flush=True)
     thread = Thread(target = model.generate, kwargs = generation_kwargs)
     thread.start()
 
     for new_text in streamer:
         print(f"TOKEN_OUTPUT: {{new_text}}", flush=True)
 
+    print("\\n✅ Generation complete.", flush=True)
+
 except Exception as e:
-    import traceback
-    print(f"Error: {{e}}")
+    print(f"❌ Subprocess error: {{e}}", flush=True)
     traceback.print_exc()
     sys.exit(1)
 '''
@@ -572,8 +600,9 @@ class MergeThread(threading.Thread):
         self.session_id = str(int(time.time()))
         
     def run(self):
+        print(f"🧵 Merge thread {self.session_id} waiting for GPU lock...")
         with gpu_lock:
-            print(f"🧵 Merge thread {self.session_id} started for SID {self.sid}")
+            print(f"🧵 Merge thread {self.session_id} acquired GPU lock. SID: {self.sid}")
             try:
                 script_path = os.path.join(WORK_DIR, f'merge_script_{self.session_id}.py')
                 with open(script_path, 'w') as f:
@@ -632,12 +661,18 @@ class MergeThread(threading.Thread):
     
     def generate_merge_script(self):
         return f'''import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
 from unsloth import FastLanguageModel
 import shutil
 import json
 import traceback
 import time
+import sys
+
+# Ensure stdout is flushed
+def log(msg):
+    print(msg, flush=True)
 
 try:
     base_model = "{self.base_model_path}"
@@ -646,38 +681,47 @@ try:
     merge_method = "{self.merge_method}"
     quantization = "{self.quantization}"
 
-    print(f"📂 Base model: {{base_model}}")
-    print(f"📂 LoRA adapters: {{lora_path}}")
-    print(f"📂 Output: {{output_path}}")
+    log(f"📂 Base model: {{base_model}}")
+    log(f"📂 LoRA adapters: {{lora_path}}")
+    log(f"📂 Output: {{output_path}}")
 
-    print("🚀 Loading model and LoRA adapters...")
+    log("🚀 Loading model and LoRA adapters...")
     try:
-        # Load directly via Unsloth's from_pretrained which supports LoRA path
+        # Use unsloth's optimized loader
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=lora_path if lora_path else base_model,
             max_seq_length=4096,
             load_in_4bit=(merge_method == "merged_4bit"),
             device_map="auto",
         )
-        print("✅ Model loaded")
+        log("✅ Model loaded")
         
     except Exception as e:
-        print(f"❌ Error loading model: {{e}}")
+        log(f"❌ Error loading model: {{e}}")
         traceback.print_exc()
-        raise
+        sys.exit(1)
 
     try:
         os.makedirs(output_path, exist_ok=True)
         
         if quantization != "none":
-            print(f"📦 Starting GGUF export ({{quantization}})...")
-            print("⏳ This may take a few minutes depending on model size...")
+            log(f"📦 Starting GGUF export ({{quantization}})...")
+            log("⏳ This process involves merging and then quantizing. It may take several minutes.")
+            # unsloth will install llama.cpp if not present, which might explain the "system package" message
             model.save_pretrained_gguf(output_path, tokenizer, quantization_method = quantization)
-            print("✅ GGUF export finished successfully")
+            log("✅ GGUF export finished successfully")
+
+            # Check if GGUF files were actually created
+            files = os.listdir(output_path)
+            gguf_files = [f for f in files if f.endswith(".gguf")]
+            if gguf_files:
+                log(f"📄 Created GGUF files: {{gguf_files}}")
+            else:
+                log("⚠️ Warning: No .gguf files found in output directory!")
         else:
-            print(f"🔄 Starting LoRA merge ({{merge_method}})...")
+            log(f"🔄 Starting LoRA merge ({{merge_method}})...")
             model.save_pretrained_merged(output_path, tokenizer, save_method = merge_method.replace("merged_", ""))
-            print("✅ HF merge finished successfully")
+            log("✅ HF merge finished successfully")
         
         if os.path.exists(os.path.join(lora_path, "training_config.json")):
             shutil.copy(
@@ -1053,13 +1097,6 @@ def start_training():
     
     # Pornește thread-ul de antrenare
     thread = TrainingThread(socket_id, config)
-
-    # Wrap run with gpu_lock
-    original_run = thread.run
-    def locked_run():
-        with gpu_lock:
-            original_run()
-    thread.run = locked_run
 
     # Folosește background task din SocketIO pentru o mai bună integrare
     socketio.start_background_task(thread.run)

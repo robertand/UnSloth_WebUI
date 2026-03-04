@@ -1,0 +1,73 @@
+/app/unsloth_webui.py:2: DeprecationWarning:
+Eventlet is deprecated. It is currently being maintained in bugfix mode, and
+we strongly recommend against using it for new projects.
+
+If you are already using Eventlet, we recommend migrating to a different
+framework.  For more detail see
+https://eventlet.readthedocs.io/en/latest/asyncio/migration.html
+
+  import eventlet
+Server initialized for eventlet.
+✅ Loaded working directory: /app/WORK
+
+============================================================
+🚀 Unsloth WebUI starting...
+📁 Working directory: /app/WORK
+🌐 Access at: http://localhost:7862
+⚙️ Configure at: http://localhost:7862/config
+🔍 Health check: http://localhost:7862/health
+🔧 Debug mode: ON (Reloader disabled to prevent restarts during training)
+============================================================
+
+tkMXh1jPAGnnIOX2AAAA: Sending packet OPEN data {'sid': 'tkMXh1jPAGnnIOX2AAAA', 'upgrades': ['websocket'], 'pingTimeout': 20000, 'pingInterval': 25000, 'maxPayload': 104857600}
+📡 API Request: GET /api/gpu_info
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+⚠️ Error getting GPU info: [Errno 2] No such file or directory: 'nvidia-smi'
+✅ API Response: /api/gpu_info - Status OK
+tkMXh1jPAGnnIOX2AAAA: Received packet MESSAGE data 0
+🔌 Client connected: WbowJCICqZ_Y8BFkAAAB
+emitting event "connected" to WbowJCICqZ_Y8BFkAAAB [/]
+tkMXh1jPAGnnIOX2AAAA: Sending packet MESSAGE data 2["connected",{"working_dir":"/app/WORK","sid":"WbowJCICqZ_Y8BFkAAAB","active_training":false}]
+tkMXh1jPAGnnIOX2AAAA: Sending packet MESSAGE data 0{"sid":"WbowJCICqZ_Y8BFkAAAB"}
+tkMXh1jPAGnnIOX2AAAA: Received request to upgrade to websocket
+tkMXh1jPAGnnIOX2AAAA: Upgrade to websocket successful
+📡 API Request: GET /api/models
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/models - Status OK
+📡 API Request: GET /api/files
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/files - Status OK
+📡 API Request: GET /api/merged_models
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/merged_models - Status OK
+📡 API Request: GET /api/trained_models
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/trained_models - Status OK
+tkMXh1jPAGnnIOX2AAAA: Sending packet PING data None
+tkMXh1jPAGnnIOX2AAAA: Received packet PONG data
+🔌 Client disconnected: WbowJCICqZ_Y8BFkAAAB
+HieimoarJaGRldzrAAAC: Sending packet OPEN data {'sid': 'HieimoarJaGRldzrAAAC', 'upgrades': ['websocket'], 'pingTimeout': 20000, 'pingInterval': 25000, 'maxPayload': 104857600}
+📡 API Request: GET /api/gpu_info
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+⚠️ Error getting GPU info: [Errno 2] No such file or directory: 'nvidia-smi'
+✅ API Response: /api/gpu_info - Status OK
+HieimoarJaGRldzrAAAC: Received packet MESSAGE data 0
+🔌 Client connected: T2tjphkwiQbwsmkEAAAD
+emitting event "connected" to T2tjphkwiQbwsmkEAAAD [/]
+HieimoarJaGRldzrAAAC: Sending packet MESSAGE data 2["connected",{"working_dir":"/app/WORK","sid":"T2tjphkwiQbwsmkEAAAD","active_training":false}]
+HieimoarJaGRldzrAAAC: Sending packet MESSAGE data 0{"sid":"T2tjphkwiQbwsmkEAAAD"}
+HieimoarJaGRldzrAAAC: Received request to upgrade to websocket
+📡 API Request: GET /api/models
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/models - Status OK
+📡 API Request: GET /api/files
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/files - Status OK
+📡 API Request: GET /api/trained_models
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/trained_models - Status OK
+📡 API Request: GET /api/merged_models
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+✅ API Response: /api/merged_models - Status OK
+HieimoarJaGRldzrAAAC: Upgrade to websocket successful
+🔌 Client disconnected: T2tjphkwiQbwsmkEAAAD
