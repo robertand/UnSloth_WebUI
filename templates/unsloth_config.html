@@ -134,11 +134,68 @@
         
         <div id="message" class="message"></div>
         
+        <div style="margin-top: 30px; border-top: 1px solid #334155; padding-top: 20px;">
+            <h2 style="color: #a5b4fc; font-size: 1.2em; margin-bottom: 15px;">🛠️ System Prerequisites (GGUF Export)</h2>
+            <div id="depsList" style="background: #0f172a; padding: 15px; border-radius: 8px; border: 1px solid #334155;">
+                <div style="text-align: center; color: #94a3b8;">Checking dependencies...</div>
+            </div>
+
+            <div id="installBox" style="display: none; margin-top: 15px; background: #fbbf2411; border: 1px solid #fbbf2444; padding: 15px; border-radius: 8px;">
+                <p style="color: #fbbf24; font-size: 0.9em; margin-bottom: 10px;">
+                    Some tools are missing. Run this command in your terminal to install them:
+                </p>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="installCmd" readonly value="sudo apt-get update && sudo apt-get install -y build-essential cmake libcurl4-openssl-dev git"
+                           style="margin-bottom: 0; font-family: monospace; font-size: 13px; background: #1e293b; color: #fbbf24;">
+                    <button onclick="copyInstallCmd()" style="width: auto; padding: 0 15px; background: #475569; font-size: 14px;">Copy</button>
+                </div>
+            </div>
+        </div>
+
         <a href="/" class="back-link">← Back to WebUI</a>
     </div>
     
     <script>
         const socket = io();
+
+        // Check dependencies
+        function checkDeps() {
+            const depsList = document.getElementById('depsList');
+            const installBox = document.getElementById('installBox');
+
+            fetch('/api/check_deps')
+                .then(r => r.json())
+                .then(deps => {
+                    let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">';
+                    let anyMissing = false;
+
+                    for (const [name, installed] of Object.entries(deps)) {
+                        html += `
+                            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.9em;">
+                                <span>${installed ? '✅' : '❌'}</span>
+                                <span style="color: ${installed ? '#86efac' : '#fca5a5'};">${name}</span>
+                            </div>
+                        `;
+                        if (!installed) anyMissing = true;
+                    }
+
+                    html += '</div>';
+                    depsList.innerHTML = html;
+                    if (anyMissing) installBox.style.display = 'block';
+                })
+                .catch(err => {
+                    depsList.innerHTML = '<div style="color: #ef4444;">Error checking dependencies</div>';
+                });
+        }
+
+        function copyInstallCmd() {
+            const cmd = document.getElementById('installCmd');
+            cmd.select();
+            document.execCommand('copy');
+            alert('Command copied to clipboard! Run it in your terminal.');
+        }
+
+        checkDeps();
         
         socket.on('connect', function() {
             console.log('✅ Connected to server with ID:', socket.id);

@@ -1259,8 +1259,10 @@ def check_deps():
         'gcc': shutil.which('gcc') is not None,
         'g++': shutil.which('g++') is not None,
         'make': shutil.which('make') is not None,
+        'git': shutil.which('git') is not None,
         'build-essential': check_pkg('build-essential'),
-        'libgomp1': check_pkg('libgomp1')
+        'libgomp1': check_pkg('libgomp1'),
+        'libcurl4-openssl-dev': check_pkg('libcurl4-openssl-dev')
     }
     return jsonify(deps)
 

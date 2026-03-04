@@ -550,7 +550,12 @@
 
         <!-- Training Console -->
         <div class="card" style="margin-bottom: 25px;">
-            <h2>📟 Training Console</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px;">
+                <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">📟 Training Console</h2>
+                <div id="dependencyIndicator" style="display: none; align-items: center; gap: 8px; color: #fbbf24; font-size: 0.85em; background: #fbbf2422; padding: 4px 12px; border-radius: 20px; border: 1px solid #fbbf2444;">
+                    ⚠️ System tools missing (GGUF might fail)
+                </div>
+            </div>
             <div class="console" id="console">
                 <div class="console-line">Ready to start training...</div>
             </div>
@@ -560,9 +565,12 @@
         <div class="card" style="margin-bottom: 25px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px;">
                 <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">💬 LoRA Chat Test</h2>
-                <button class="btn btn-danger" onclick="clearChat()" style="padding: 5px 15px; font-size: 0.9em;">
-                    🧹 Clear Chat
-                </button>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span style="color: #10b981; font-size: 0.85em;">⚡ NVIDIA CUDA Accelerated (Triton)</span>
+                    <button class="btn btn-danger" onclick="clearChat()" style="padding: 5px 15px; font-size: 0.9em;">
+                        🧹 Clear Chat
+                    </button>
+                </div>
             </div>
 
             <div class="form-group">
@@ -733,7 +741,19 @@
                 showToast('Merge failed: ' + data.error, 'error');
 
                 if (status) {
-                    status.textContent = '❌ Failed: ' + data.error;
+                    let errorHtml = '❌ Failed: ' + data.error;
+                    if (data.error.includes('internet connection') || data.error.includes('return code 1') || data.error.includes('sudo') || data.error.includes('packages')) {
+                        errorHtml += `
+                            <div style="margin-top: 15px; text-align: left; background: #0f172a; padding: 12px; border-radius: 6px; border: 1px solid #ef4444; font-size: 0.9em;">
+                                <strong>🛠️ How to fix:</strong><br>
+                                GGUF export requires some system tools. Please run this command in your terminal to install them manually:
+                                <div style="margin-top: 8px; background: #1e293b; padding: 8px; border-radius: 4px; font-family: monospace; color: #fbbf24; border: 1px solid #334155;">
+                                    sudo apt-get update && sudo apt-get install -y build-essential cmake libcurl4-openssl-dev git
+                                </div>
+                            </div>
+                        `;
+                    }
+                    status.innerHTML = errorHtml;
                     status.style.color = '#ef4444';
                 }
             }
@@ -1386,6 +1406,9 @@
                             </label>
 
                             <div id="ggufOptions" style="display: none; margin-top: 15px; padding-left: 30px;">
+                                <div id="depWarning" style="color: #fbbf24; font-size: 0.85em; margin-bottom: 10px; display: none; background: #fbbf2422; padding: 8px; border-radius: 4px; border: 1px solid #fbbf2444;">
+                                    ⚠️ <strong>Note:</strong> Some system tools (cmake/gcc) might be missing. GGUF export will try to install them, which needs internet and might ask for sudo password in terminal.
+                                </div>
                                 <label style="display: block; font-size: 0.9em; margin-bottom: 8px; color: #94a3b8;">Quantization Method:</label>
                                 <select id="ggufQuant" class="form-control" style="background: #1e293b; color: #e2e8f0; border: 1px solid #334155;">
                                     <option value="q4_k_m">q4_k_m (Recommended - Best balance)</option>
@@ -1421,11 +1444,21 @@
         function toggleGgufOptions(checkbox) {
             const options = document.getElementById('ggufOptions');
             const btn = document.getElementById('mergeSubmitBtn');
+            const depWarning = document.getElementById('depWarning');
             options.style.display = checkbox.checked ? 'block' : 'none';
 
             if (checkbox.checked) {
                 btn.innerHTML = '📦 Start Merge & Export GGUF';
                 btn.style.background = 'linear-gradient(90deg, #10b981, #3b82f6)';
+
+                fetch('/api/check_deps')
+                    .then(r => r.json())
+                    .then(deps => {
+                        const missing = Object.entries(deps).filter(([k, v]) => !v).map(([k, v]) => k);
+                        if (missing.length > 0 && depWarning) {
+                            depWarning.style.display = 'block';
+                        }
+                    });
             } else {
                 btn.innerHTML = '🚀 Start Merge';
                 btn.style.background = '#6366f1';
@@ -1437,7 +1470,27 @@
                 showToast('Socket not connected', 'error');
                 return;
             }
-            
+
+            const makeGguf = document.getElementById('makeGguf').checked;
+            if (makeGguf) {
+                // Last minute dependency check to avoid sudo hang
+                fetch('/api/check_deps')
+                    .then(r => r.json())
+                    .then(deps => {
+                        const missing = Object.entries(deps).filter(([k, v]) => !v).map(([k, v]) => k);
+                        if (missing.includes('cmake') || missing.includes('build-essential') || missing.includes('libcurl4-openssl-dev')) {
+                            if (!confirm('⚠️ SYSTEM TOOLS MISSING: GGUF conversion requires "cmake", "build-essential" and "libcurl4-openssl-dev". \n\nStarting now might trigger a hidden "sudo" prompt in terminal and cause the program to HANG.\n\nAre you sure you want to proceed? (It is highly recommended to install dependencies manually first)')) {
+                                return;
+                            }
+                        }
+                        proceedWithMerge(modelName, button);
+                    });
+            } else {
+                proceedWithMerge(modelName, button);
+            }
+        }
+
+        function proceedWithMerge(modelName, button) {
             const method = document.querySelector('input[name="mergeMethod"]:checked').value;
             const makeGguf = document.getElementById('makeGguf').checked;
             const quant = makeGguf ? document.getElementById('ggufQuant').value : 'none';
@@ -1497,6 +1550,17 @@
             })
             .catch(() => {
                 document.getElementById('gpu-info').textContent = 'GPU: N/A | VRAM: N/A';
+            });
+
+        // Check dependencies globally
+        fetch('/api/check_deps')
+            .then(r => r.json())
+            .then(deps => {
+                const missing = Object.entries(deps).filter(([k, v]) => !v).map(([k, v]) => k);
+                if (missing.length > 0) {
+                    document.getElementById('dependencyIndicator').style.display = 'flex';
+                    console.warn('Missing system dependencies:', missing);
+                }
             });
     </script>
 </body>
