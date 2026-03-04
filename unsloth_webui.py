@@ -279,6 +279,10 @@ class TrainingThread(threading.Thread):
             })
     
     def generate_training_script(self, model_name):
+        model_name_repr = repr(model_name)
+        dataset_path_repr = repr(self.config['dataset_path'])
+        output_dir_repr = repr(self.config['output_dir'])
+
         return f'''import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
@@ -306,9 +310,9 @@ class ProgressCallback(TrainerCallback):
 
 try:
     # Configurare
-    model_name = "{model_name}"
-    dataset_path = "{self.config['dataset_path']}"
-    output_dir = "{self.config['output_dir']}"
+    model_name = {model_name_repr}
+    dataset_path = {dataset_path_repr}
+    output_dir = {output_dir_repr}
     max_seq_length = {self.config.get('max_seq_length', 2048)}
     load_in_4bit = {self.config.get('load_in_4bit', True)}
     batch_size = {self.config.get('batch_size', 2)}
@@ -506,6 +510,10 @@ class InferenceThread(threading.Thread):
         messages_json = json.dumps(self.messages)
         messages_b64 = base64.b64encode(messages_json.encode('utf-8')).decode('utf-8')
 
+        # Use repr() for path variables to correctly handle None vs string
+        model_name_repr = repr(self.model_name)
+        lora_path_repr = repr(self.lora_path)
+
         return f'''
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -518,8 +526,8 @@ import json
 import base64
 import traceback
 
-model_name = "{self.model_name}"
-lora_path = "{self.lora_path}"
+model_name = {model_name_repr}
+lora_path = {lora_path_repr}
 messages_b64 = "{messages_b64}"
 
 try:
@@ -660,6 +668,11 @@ class MergeThread(threading.Thread):
                 })
     
     def generate_merge_script(self):
+        # Use repr() to safely pass paths
+        base_model_repr = repr(self.base_model_path)
+        lora_path_repr = repr(self.lora_path)
+        output_path_repr = repr(self.output_path)
+
         return f'''import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
@@ -675,9 +688,9 @@ def log(msg):
     print(msg, flush=True)
 
 try:
-    base_model = "{self.base_model_path}"
-    lora_path = "{self.lora_path}"
-    output_path = "{self.output_path}"
+    base_model = {base_model_repr}
+    lora_path = {lora_path_repr}
+    output_path = {output_path_repr}
     merge_method = "{self.merge_method}"
     quantization = "{self.quantization}"
 
