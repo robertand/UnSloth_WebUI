@@ -518,8 +518,8 @@ class InferenceThread(threading.Thread):
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
-from unsloth import FastLanguageModel
-from transformers import TextIteratorStreamer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer, BitsAndBytesConfig
+from peft import PeftModel
 from threading import Thread
 import sys
 import json
@@ -532,21 +532,38 @@ messages_b64 = "{messages_b64}"
 
 try:
     print(f"🔍 Loading model: {{model_name}}", flush=True)
-    if lora_path:
-        print(f"📦 Loading LoRA adapters: {{lora_path}}", flush=True)
-
     messages = json.loads(base64.b64decode(messages_b64).decode('utf-8'))
 
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name = lora_path if lora_path else model_name,
-        max_seq_length = 2048,
-        load_in_4bit = True,
-        device_map = "auto",
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Configuration for high-performance 4-bit inference
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
     )
 
-    # Highly optimized inference settings
-    FastLanguageModel.for_inference(model)
-    print("✅ Model loaded and optimized for inference.", flush=True)
+    # Use SDPA (Scaled Dot Product Attention) for high performance
+    # This automatically leverages FlashAttention-2 if compatible hardware/drivers are present
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        quantization_config=bnb_config,
+        device_map="auto",
+        torch_dtype=torch.float16,
+        attn_implementation="sdpa",
+        trust_remote_code=True
+    )
+
+    if lora_path:
+        print(f"📦 Loading LoRA adapters: {{lora_path}}", flush=True)
+        model = PeftModel.from_pretrained(model, lora_path)
+        print("✅ LoRA adapters merged into base model.", flush=True)
+
+    model.eval()
+    print("✅ Model loaded with SDPA/FlashAttention acceleration.", flush=True)
 
     # Use chat template if available, otherwise fallback to simple join
     try:
@@ -574,9 +591,9 @@ try:
         streamer = streamer,
         max_new_tokens = {self.max_new_tokens},
         use_cache = True,
-        # Standard unsloth optimizations for generation
-        temperature = 1.2,
-        min_p = 0.1,
+        do_sample = True,
+        temperature = 0.7,
+        top_p = 0.9,
     )
 
     print("🚀 Starting generation...", flush=True)
@@ -1033,11 +1050,16 @@ def start_inference():
         return jsonify({'error': 'No working directory'}), 400
 
     data = request.get_json(silent=True) or {}
-    model_name = data.get('model_name')
+    model_id = data.get('model_identifier')
 
+    # Handle Merged Models
+    if model_id.startswith('merged:'):
+        model_name = os.path.join(get_work_path(MERGED_FOLDER), model_id.replace('merged:', ''))
     # Handle custom models
-    if model_name and model_name.startswith('custom:'):
-        model_name = model_name.replace('custom:', '')
+    elif model_id.startswith('custom:'):
+        model_name = model_id.replace('custom:', '')
+    else:
+        model_name = model_id
 
     lora_name = data.get('lora_name') # Optional
     messages = data.get('messages') # List of messages
@@ -1047,7 +1069,7 @@ def start_inference():
         return jsonify({'error': 'No messages provided'}), 400
 
     lora_path = None
-    if lora_name and lora_name != "Base Model Only":
+    if lora_name and lora_name != "none":
         lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name, "lora_adapter")
         if not os.path.exists(lora_path):
             # Try direct path

@@ -561,28 +561,36 @@
             </div>
         </div>
 
-        <!-- LoRA Chat Test -->
+        <!-- High-Performance Model Conversation -->
         <div class="card" style="margin-bottom: 25px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px;">
-                <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">💬 LoRA Chat Test</h2>
+                <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">💬 Model Conversation</h2>
                 <div style="display: flex; align-items: center; gap: 15px;">
-                    <span style="color: #10b981; font-size: 0.85em;">⚡ NVIDIA CUDA Accelerated (Triton)</span>
+                    <span style="color: #10b981; font-size: 0.85em;">⚡ SDPA/FlashAttention Accelerated</span>
                     <button class="btn btn-danger" onclick="clearChat()" style="padding: 5px 15px; font-size: 0.9em;">
                         🧹 Clear Chat
                     </button>
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>Select LoRA to test (optional)</label>
-                <select class="form-control" id="inferenceLoraSelect">
-                    <option value="Base Model Only">Base Model Only</option>
-                </select>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div class="form-group">
+                    <label>Base Model / Merged Model</label>
+                    <select class="form-control" id="inferenceBaseSelect">
+                        <option value="">Select model...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>LoRA Adapter (Optional)</label>
+                    <select class="form-control" id="inferenceLoraSelect">
+                        <option value="none">None (Use Base/Merged Only)</option>
+                    </select>
+                </div>
             </div>
 
-            <div id="chatHistory" style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; height: 400px; overflow-y: auto; padding: 15px; margin-bottom: 20px;">
-                <div style="text-align: center; color: #94a3b8; margin-top: 150px;">
-                    Start a conversation with your model...
+            <div id="chatHistory" style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; height: 450px; overflow-y: auto; padding: 15px; margin-bottom: 20px;">
+                <div style="text-align: center; color: #94a3b8; margin-top: 180px;">
+                    Select a model and start chatting!
                 </div>
             </div>
 
@@ -839,13 +847,17 @@
                 const response = await fetch('/api/models');
                 const models = await response.json();
                 const select = document.getElementById('modelSelect');
+                const infBaseSelect = document.getElementById('inferenceBaseSelect');
+
                 select.innerHTML = '';
+                infBaseSelect.innerHTML = '<option value="">Select a base model...</option>';
                 
                 for (const [name, path] of Object.entries(models)) {
                     const option = document.createElement('option');
                     option.value = path;
                     option.textContent = name;
-                    select.appendChild(option);
+                    select.appendChild(option.cloneNode(true));
+                    infBaseSelect.appendChild(option);
                 }
                 
                 checkTrainingReady();
@@ -912,11 +924,12 @@
                 
                 if (models.length === 0) {
                     outputsList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No trained models yet</div>';
+                    inferenceLoraSelect.innerHTML = '<option value="none">None (Use Base/Merged Only)</option>';
                     return;
                 }
                 
                 let html = '<div style="display: grid; gap: 15px;">';
-                let loraOptions = '<option value="Base Model Only">Base Model Only</option>';
+                let loraOptions = '<option value="none">None (Use Base/Merged Only)</option>';
                 
                 models.forEach(model => {
                     loraOptions += `<option value="${model.name}">${model.name}</option>`;
@@ -968,6 +981,7 @@
                 const models = await response.json();
                 
                 const mergedList = document.getElementById('mergedModelsList');
+                const infBaseSelect = document.getElementById('inferenceBaseSelect');
                 
                 if (models.length === 0) {
                     mergedList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No merged models yet</div>';
@@ -977,6 +991,11 @@
                 let html = '<div style="display: grid; gap: 15px;">';
                 
                 models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = 'merged:' + model.name;
+                    option.textContent = '📦 Merged: ' + model.name;
+                    infBaseSelect.appendChild(option);
+
                     html += `
                         <div style="background: #0f172a; padding: 20px; border-radius: 8px; border: 1px solid #10b981;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -1205,11 +1224,11 @@
 
             if (!prompt) return;
 
-            const modelName = document.getElementById('modelSelect').value;
+            const modelName = document.getElementById('inferenceBaseSelect').value;
             const loraName = document.getElementById('inferenceLoraSelect').value;
 
             if (!modelName) {
-                showToast('Please select a base model first', 'error');
+                showToast('Please select a model to chat with', 'error');
                 return;
             }
 
@@ -1225,7 +1244,7 @@
             appendMessage('assistant', '');
 
             const config = {
-                model_name: modelName,
+                model_identifier: modelName,
                 lora_name: loraName,
                 messages: chatMessages,
                 socket_id: socketId
