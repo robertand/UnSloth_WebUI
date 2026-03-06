@@ -47,3 +47,43 @@ C-EJLFIxIC5asxhOAAAA: Upgrade to websocket successful
 📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
 ✅ API Response: /api/merged_models - Status OK
 🔌 Client disconnected: TfNd8WsTbSXH3PfZAAAB
+UEM8E9cDBNs51-OHAAAC: Sending packet OPEN data {'sid': 'UEM8E9cDBNs51-OHAAAC', 'upgrades': ['websocket'], 'pingTimeout': 20000, 'pingInterval': 25000, 'maxPayload': 104857600}
+📡 API Request: GET /api/gpu_info
+📦 Headers: {'Content-Type': 'text/plain', 'Host': 'localhost:7862', 'Connection': 'keep-alive', 'Sec-Ch-Ua-Platform': '"Linux"', 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/143.0.7499.4 Safari/537.36', 'Sec-Ch-Ua': '"HeadlessChrome";v="143", "Chromium";v="143", "Not A(Brand";v="24"', 'Sec-Ch-Ua-Mobile': '?0', 'Accept': '*/*', 'Sec-Fetch-Site': 'same-origin', 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Referer': 'http://localhost:7862/', 'Accept-Encoding': 'gzip, deflate, br, zstd'}
+UEM8E9cDBNs51-OHAAAC: Received packet MESSAGE data 0
+🔌 Client connected: uXh_3TXxxSjl61z5AAAD
+emitting event "connected" to uXh_3TXxxSjl61z5AAAD [/]
+UEM8E9cDBNs51-OHAAAC: Sending packet MESSAGE data 2["connected",{"working_dir":"/app/WORK","sid":"uXh_3TXxxSjl61z5AAAD","active_training":false}]
+UEM8E9cDBNs51-OHAAAC: Sending packet MESSAGE data 0{"sid":"uXh_3TXxxSjl61z5AAAD"}
+UEM8E9cDBNs51-OHAAAC: Received request to upgrade to websocket
+⚠️ Error getting GPU info: [Errno 2] No such file or directory: 'nvidia-smi'
+✅ API Response: /api/gpu_info - Status OK
+UEM8E9cDBNs51-OHAAAC: Failed websocket upgrade, no PING packet
+Invalid session EWrNKfFY1_-NeJzYAAAA (further occurrences of this error will be logged with level INFO)
+Invalid session EWrNKfFY1_-NeJzYAAAA
+Fa35mmL6avyZ95nIAAAE: Sending packet OPEN data {'sid': 'Fa35mmL6avyZ95nIAAAE', 'upgrades': ['websocket'], 'pingTimeout': 20000, 'pingInterval': 25000, 'maxPayload': 104857600}
+Fa35mmL6avyZ95nIAAAE: Received packet MESSAGE data 0
+🔌 Client connected: rLTh2ki6yWZsglx0AAAF
+emitting event "connected" to rLTh2ki6yWZsglx0AAAF [/]
+Fa35mmL6avyZ95nIAAAE: Sending packet MESSAGE data 2["connected",{"working_dir":"/app/WORK","sid":"rLTh2ki6yWZsglx0AAAF","active_training":false}]
+Fa35mmL6avyZ95nIAAAE: Sending packet MESSAGE data 0{"sid":"rLTh2ki6yWZsglx0AAAF"}
+Fa35mmL6avyZ95nIAAAE: Received request to upgrade to websocket
+Fa35mmL6avyZ95nIAAAE: Failed websocket upgrade, no PING packet
+Fa35mmL6avyZ95nIAAAE: Received packet CLOSE data
+🔌 Client disconnected: rLTh2ki6yWZsglx0AAAF
+ngBRNFk3QFst0sgzAAAG: Sending packet OPEN data {'sid': 'ngBRNFk3QFst0sgzAAAG', 'upgrades': ['websocket'], 'pingTimeout': 20000, 'pingInterval': 25000, 'maxPayload': 104857600}
+ngBRNFk3QFst0sgzAAAG: Received packet MESSAGE data 0
+🔌 Client connected: ULVC-7lnVI_TSAJAAAAH
+emitting event "connected" to ULVC-7lnVI_TSAJAAAAH [/]
+ngBRNFk3QFst0sgzAAAG: Sending packet MESSAGE data 2["connected",{"working_dir":"/app/WORK","sid":"ULVC-7lnVI_TSAJAAAAH","active_training":false}]
+ngBRNFk3QFst0sgzAAAG: Sending packet MESSAGE data 0{"sid":"ULVC-7lnVI_TSAJAAAAH"}
+Invalid session 3O9dLODa4NrCT9fTAAAC
+Invalid session 3O9dLODa4NrCT9fTAAAC
+UEM8E9cDBNs51-OHAAAC: Sending packet PING data None
+ngBRNFk3QFst0sgzAAAG: Sending packet PING data None
+ngBRNFk3QFst0sgzAAAG: Client is gone, closing socket
+🔌 Client disconnected: ULVC-7lnVI_TSAJAAAAH
+ngBRNFk3QFst0sgzAAAG: Client is gone, closing socket
+UEM8E9cDBNs51-OHAAAC: Client is gone, closing socket
+🔌 Client disconnected: uXh_3TXxxSjl61z5AAAD
+UEM8E9cDBNs51-OHAAAC: Client is gone, closing socket

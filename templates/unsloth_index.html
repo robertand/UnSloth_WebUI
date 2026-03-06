@@ -202,6 +202,24 @@
         .btn-success:hover {
             background: #059669;
         }
+
+        .btn-info {
+            background: #0ea5e9;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #0284c7;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
         
         .btn-danger {
             background: #ef4444;
@@ -468,11 +486,49 @@
                     <div>
                         <label>Optimizer</label>
                         <select class="form-control" id="optimSelect">
-                            <option value="adamw_8bit">adamw_8bit</option>
+                            <option value="adamw_8bit">adamw_8bit (default)</option>
                             <option value="adamw_32bit">adamw_32bit</option>
-                            <option value="paged_adamw_8bit">paged_adamw_8bit</option>
+                            <option value="adamw_torch">adamw_torch</option>
+                            <option value="adamw_torch_fused">adamw_torch_fused</option>
+                            <option value="adamw_torch_xla">adamw_torch_xla</option>
+                            <option value="adamw_torch_npu_fused">adamw_torch_npu_fused</option>
+                            <option value="adamw_apex_fused">adamw_apex_fused</option>
+                            <option value="adafactor">adafactor</option>
+                            <option value="adamw_anyprecision">adamw_anyprecision</option>
+                            <option value="adamw_torch_4bit">adamw_torch_4bit</option>
+                            <option value="adamw_torch_8bit">adamw_torch_8bit</option>
+                            <option value="ademamix">ademamix</option>
+                            <option value="ademamix_8bit">ademamix_8bit</option>
+                            <option value="sgd">sgd</option>
+                            <option value="adagrad">adagrad</option>
+                            <option value="adamw_bnb_8bit">adamw_bnb_8bit</option>
+                            <option value="lion_8bit">lion_8bit</option>
+                            <option value="lion_32bit">lion_32bit</option>
                             <option value="paged_adamw_32bit">paged_adamw_32bit</option>
+                            <option value="paged_adamw_8bit">paged_adamw_8bit</option>
+                            <option value="paged_ademamix_32bit">paged_ademamix_32bit</option>
+                            <option value="paged_ademamix_8bit">paged_ademamix_8bit</option>
+                            <option value="paged_lion_32bit">paged_lion_32bit</option>
+                            <option value="paged_lion_8bit">paged_lion_8bit</option>
                             <option value="rmsprop">rmsprop</option>
+                            <option value="rmsprop_bnb">rmsprop_bnb</option>
+                            <option value="rmsprop_bnb_8bit">rmsprop_bnb_8bit</option>
+                            <option value="rmsprop_bnb_32bit">rmsprop_bnb_32bit</option>
+                            <option value="galore_adamw">galore_adamw</option>
+                            <option value="galore_adamw_8bit">galore_adamw_8bit</option>
+                            <option value="galore_adafactor">galore_adafactor</option>
+                            <option value="galore_adamw_layerwise">galore_adamw_layerwise</option>
+                            <option value="galore_adamw_8bit_layerwise">galore_adamw_8bit_layerwise</option>
+                            <option value="galore_adafactor_layerwise">galore_adafactor_layerwise</option>
+                            <option value="lomo">lomo</option>
+                            <option value="adalomo">adalomo</option>
+                            <option value="grokadamw">grokadamw</option>
+                            <option value="schedule_free_radam">schedule_free_radam</option>
+                            <option value="schedule_free_adamw">schedule_free_adamw</option>
+                            <option value="schedule_free_sgd">schedule_free_sgd</option>
+                            <option value="apollo_adamw">apollo_adamw</option>
+                            <option value="apollo_adamw_layerwise">apollo_adamw_layerwise</option>
+                            <option value="stable_adamw">stable_adamw</option>
                         </select>
                     </div>
                 </div>
@@ -514,8 +570,16 @@
                 
                 <div class="custom-model-form">
                     <h3 style="color: #a5b4fc; margin-bottom: 10px;">➕ Add Custom Model</h3>
-                    <input type="text" id="customModelName" class="form-control" placeholder="Model name" style="margin-bottom: 10px;">
-                    <input type="text" id="customModelPath" class="form-control" placeholder="HuggingFace path or local path" style="margin-bottom: 10px;">
+                    <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                        <input type="text" id="hfSearchInput" class="form-control" placeholder="Search HuggingFace models...">
+                        <button class="btn btn-info" onclick="searchHFModels()" style="padding: 5px 15px;">🔍</button>
+                    </div>
+                    <div id="hfSearchResults" style="max-height: 200px; overflow-y: auto; background: #0f172a; border-radius: 6px; margin-bottom: 10px; display: none; border: 1px solid #334155;">
+                        <!-- Results go here -->
+                    </div>
+
+                    <input type="text" id="customModelName" class="form-control" placeholder="Model name (e.g. MyLlama)" style="margin-bottom: 10px;">
+                    <input type="text" id="customModelPath" class="form-control" placeholder="HuggingFace path (e.g. unsloth/llama-3) or local path" style="margin-bottom: 10px;">
                     <button class="btn btn-success" onclick="addCustomModel()" style="width: 100%;">Add Custom Model</button>
                 </div>
             </div>
@@ -565,8 +629,9 @@
         <div class="card" style="margin-bottom: 25px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 2px solid #334155; padding-bottom: 10px;">
                 <h2 style="border-bottom: none; margin-bottom: 0; padding-bottom: 0;">💬 Model Conversation</h2>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <span style="color: #10b981; font-size: 0.85em;">⚡ SDPA/FlashAttention Accelerated</span>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div id="vramStatusBadge" class="badge" style="background: #475569; padding: 4px 10px;">🔴 VRAM: Off</div>
+                    <span style="color: #10b981; font-size: 0.85em;">⚡ SDPA Accelerated</span>
                     <button class="btn btn-danger" onclick="clearChat()" style="padding: 5px 15px; font-size: 0.9em;">
                         🧹 Clear Chat
                     </button>
@@ -586,6 +651,15 @@
                         <option value="none">None (Use Base/Merged Only)</option>
                     </select>
                 </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn btn-success" id="loadToVramBtn" onclick="loadModelToVram()" style="flex: 1;">
+                    🚀 Load Model to VRAM (Fast Chat)
+                </button>
+                <button class="btn btn-warning" id="unloadFromVramBtn" onclick="unloadModelFromVram()" style="flex: 0 0 auto; background: #f59e0b; color: white;" disabled>
+                    🔌 Unload
+                </button>
             </div>
 
             <div id="chatHistory" style="background: #0f172a; border: 1px solid #334155; border-radius: 8px; height: 450px; overflow-y: auto; padding: 15px; margin-bottom: 20px;">
@@ -643,6 +717,17 @@
             loadOutputs();
             loadMergedModels();
             loadLogs();
+            checkVramStatus();
+        });
+
+        socket.on('connected', function(data) {
+            console.log('📊 Connection established, status:', data);
+            if (data.active_training) {
+                trainingActive = true;
+                checkTrainingReady();
+                document.getElementById('trainingProgressSection').style.display = 'block';
+                addToConsole('ℹ️ A training session is currently active.');
+            }
         });
         
         socket.on('connect_error', function(error) {
@@ -779,6 +864,40 @@
                 if (data.data.includes('🔍 Loading model') || data.data.includes('🚀 Starting generation')) {
                     content.innerHTML = `<i style="color: #94a3b8;">${data.data.trim()}...</i>`;
                 }
+            }
+        });
+
+        socket.on('vram_status', function(data) {
+            const badge = document.getElementById('vramStatusBadge');
+            const loadBtn = document.getElementById('loadToVramBtn');
+            const unloadBtn = document.getElementById('unloadFromVramBtn');
+
+            if (data.status === 'ready') {
+                badge.textContent = '🟢 VRAM Ready: ' + data.model.split('/').pop();
+                badge.style.background = '#10b981';
+                loadBtn.disabled = true;
+                unloadBtn.disabled = false;
+                loadBtn.textContent = '🚀 Model Loaded';
+                showToast('Model loaded in VRAM!', 'success');
+            } else if (data.status === 'loading') {
+                badge.textContent = '🟡 VRAM Loading...';
+                badge.style.background = '#f59e0b';
+                loadBtn.disabled = true;
+                unloadBtn.disabled = true;
+                loadBtn.textContent = '⏳ Loading...';
+            } else if (data.status === 'error') {
+                badge.textContent = '🔴 VRAM Error';
+                badge.style.background = '#ef4444';
+                loadBtn.disabled = false;
+                unloadBtn.disabled = true;
+                loadBtn.textContent = '🚀 Load Model to VRAM';
+                showToast('Error loading to VRAM: ' + data.message, 'error');
+            } else {
+                badge.textContent = '🔴 VRAM: Off';
+                badge.style.background = '#475569';
+                loadBtn.disabled = false;
+                unloadBtn.disabled = true;
+                loadBtn.textContent = '🚀 Load Model to VRAM (Fast Chat)';
             }
         });
 
@@ -975,6 +1094,84 @@
             }
         }
         
+        async function loadModelToVram() {
+            const modelName = document.getElementById('inferenceBaseSelect').value;
+            const loraName = document.getElementById('inferenceLoraSelect').value;
+
+            if (!modelName) {
+                showToast('Please select a model to load', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/vram/load', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model_identifier: modelName,
+                        lora_name: loraName
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast('VRAM Load started...', 'info');
+                }
+            } catch (error) {
+                showToast('Load error: ' + error, 'error');
+            }
+        }
+
+        async function unloadModelFromVram() {
+            try {
+                const response = await fetch('/api/vram/unload');
+                const result = await response.json();
+                if (result.success) {
+                    showToast('VRAM freed', 'info');
+                }
+            } catch (error) {
+                showToast('Unload error: ' + error, 'error');
+            }
+        }
+
+        async function checkVramStatus() {
+            try {
+                const response = await fetch('/api/vram/status');
+                const data = await response.json();
+                // Trigger the UI update via the same logic as the socket event
+                socket.emit('vram_status', data);
+                // Note: We don't actually have a server listener for this,
+                // but we can manually call the handler if needed or just trust the periodic socket updates.
+                // Better: Just update the UI directly here if socket hasn't.
+                updateVramUI(data);
+            } catch (e) {}
+        }
+
+        function updateVramUI(data) {
+            const badge = document.getElementById('vramStatusBadge');
+            const loadBtn = document.getElementById('loadToVramBtn');
+            const unloadBtn = document.getElementById('unloadFromVramBtn');
+
+            if (data.status === 'ready') {
+                badge.textContent = '🟢 VRAM Ready: ' + data.model.split('/').pop();
+                badge.style.background = '#10b981';
+                loadBtn.disabled = true;
+                unloadBtn.disabled = false;
+                loadBtn.textContent = '🚀 Model Loaded';
+            } else if (data.status === 'loading') {
+                badge.textContent = '🟡 VRAM Loading...';
+                badge.style.background = '#f59e0b';
+                loadBtn.disabled = true;
+                unloadBtn.disabled = true;
+                loadBtn.textContent = '⏳ Loading...';
+            } else {
+                badge.textContent = '🔴 VRAM: Off';
+                badge.style.background = '#475569';
+                loadBtn.disabled = false;
+                unloadBtn.disabled = true;
+                loadBtn.textContent = '🚀 Load Model to VRAM (Fast Chat)';
+            }
+        }
+
         async function loadMergedModels() {
             try {
                 const response = await fetch('/api/merged_models');
@@ -1135,6 +1332,50 @@
             }
         }
         
+        async function searchHFModels() {
+            const query = document.getElementById('hfSearchInput').value.trim();
+            if (!query) return;
+
+            const resultsDiv = document.getElementById('hfSearchResults');
+            resultsDiv.innerHTML = '<div style="padding: 10px; color: #94a3b8;">Searching...</div>';
+            resultsDiv.style.display = 'block';
+
+            try {
+                const response = await fetch(`/api/hf/search?q=${encodeURIComponent(query)}`);
+                const models = await response.json();
+
+                if (models.length === 0) {
+                    resultsDiv.innerHTML = '<div style="padding: 10px; color: #94a3b8;">No models found</div>';
+                    return;
+                }
+
+                let html = '';
+                models.forEach(m => {
+                    html += `
+                        <div style="padding: 8px 12px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s;"
+                             onclick="selectHFModel('${m.id}')" onmouseover="this.style.background='#1e293b'" onmouseout="this.style.background='transparent'">
+                            <div>
+                                <div style="font-weight: bold; font-size: 0.9em; color: #e2e8f0;">${m.id}</div>
+                                <div style="font-size: 0.8em; color: #94a3b8;">📥 ${m.downloads.toLocaleString()} downloads • ❤️ ${m.likes.toLocaleString()} likes</div>
+                            </div>
+                            <div style="color: #6366f1;">➕</div>
+                        </div>
+                    `;
+                });
+                resultsDiv.innerHTML = html;
+            } catch (error) {
+                console.error('HF Search error:', error);
+                resultsDiv.innerHTML = '<div style="padding: 10px; color: #ef4444;">Search failed</div>';
+            }
+        }
+
+        function selectHFModel(modelId) {
+            const shortName = modelId.split('/').pop();
+            document.getElementById('customModelName').value = shortName;
+            document.getElementById('customModelPath').value = modelId;
+            document.getElementById('hfSearchResults').style.display = 'none';
+        }
+
         async function addCustomModel() {
             const name = document.getElementById('customModelName').value;
             const path = document.getElementById('customModelPath').value;
@@ -1157,6 +1398,7 @@
                     showToast('Custom model added successfully', 'success');
                     document.getElementById('customModelName').value = '';
                     document.getElementById('customModelPath').value = '';
+                    document.getElementById('hfSearchInput').value = '';
                     loadModels();
                 } else {
                     showToast('Error: ' + result.error, 'error');

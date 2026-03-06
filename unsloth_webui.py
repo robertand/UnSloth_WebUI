@@ -38,6 +38,100 @@ ALLOWED_EXTENSIONS = {'json', 'jsonl', 'csv', 'txt', 'parquet', 'zip'}
 active_threads = {}
 # Mutex for GPU access to prevent OOM
 gpu_lock = threading.Lock()
+
+class PersistentInferenceManager:
+    def __init__(self):
+        self.process = None
+        self.current_model = None
+        self.current_lora = None
+        self.status = "idle" # idle, loading, ready
+        self.lock = threading.Lock()
+
+    def start_worker(self, model_id, lora_path=None):
+        with self.lock:
+            if self.process:
+                self.stop_worker()
+
+            self.status = "loading"
+            self.current_model = model_id
+            self.current_lora = lora_path
+
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+
+            script_path = os.path.join(os.path.dirname(__file__), 'persistent_inference_worker.py')
+            self.process = subprocess.Popen(
+                [sys.executable, script_path],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                universal_newlines=True,
+                env=env
+            )
+
+            # Start a thread to read logs/status
+            threading.Thread(target=self._monitor_output, daemon=True).start()
+
+            # Send load command
+            cmd = json.dumps({'action': 'load', 'model_id': model_id, 'lora_path': lora_path})
+            self.process.stdin.write(cmd + '\n')
+            self.process.stdin.flush()
+
+    def stop_worker(self):
+        with self.lock:
+            if self.process:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=5)
+                except:
+                    self.process.kill()
+                self.process = None
+            self.current_model = None
+            self.current_lora = None
+            self.status = "idle"
+
+    def chat(self, messages, max_new_tokens=256):
+        if not self.process or self.status != "ready":
+            return False
+
+        cmd = json.dumps({'action': 'chat', 'messages': messages, 'max_new_tokens': max_new_tokens})
+        self.process.stdin.write(cmd + '\n')
+        self.process.stdin.flush()
+        return True
+
+    def _monitor_output(self):
+        while self.process:
+            line = self.process.stdout.readline()
+            if not line:
+                break
+
+            line = line.strip()
+            if line.startswith("WORKER_LOG: "):
+                msg = line.replace("WORKER_LOG: ", "")
+                print(f"🤖 [Worker] {msg}")
+                if "LOAD_COMPLETE" in msg:
+                    self.status = "ready"
+                    socketio.emit('vram_status', {'status': 'ready', 'model': self.current_model})
+                elif "CRITICAL_ERROR" in msg:
+                    self.status = "error"
+                    socketio.emit('vram_status', {'status': 'error', 'message': msg})
+
+            elif line == "CHAT_START":
+                socketio.emit('inference_output', {'data': "💬 (Persistent Model) Generând răspuns...\n"})
+
+            elif line.startswith("TOKEN: "):
+                token = line.replace("TOKEN: ", "").replace('\\n', '\n').replace('\\r', '\r')
+                socketio.emit('inference_token', {'token': token})
+
+            elif line == "CHAT_END":
+                socketio.emit('inference_complete', {'success': True, 'persistent': True})
+
+        print("🤖 [Worker] Process exited.")
+        self.status = "idle"
+        socketio.emit('vram_status', {'status': 'idle'})
+
+vram_manager = PersistentInferenceManager()
 # Buffer pentru ultimele log-uri de antrenare
 training_logs_buffer = []
 MAX_LOG_BUFFER = 500
@@ -175,13 +269,14 @@ class TrainingThread(threading.Thread):
             model_name = self.config['model_name']
             if model_name.startswith('custom:'):
                 model_path = model_name.replace('custom:', '')
-                if not os.path.exists(model_path):
+                # Relax existence check to support HuggingFace repo IDs (which contain '/')
+                if not os.path.exists(model_path) and "/" not in model_path:
                     socketio.emit('training_output', {
-                        'data': f"❌ Model path not found: {model_path}\n"
+                        'data': f"❌ Model path not found and does not look like a HuggingFace repo: {model_path}\n"
                     })
                     socketio.emit('training_complete', {
                         'success': False,
-                        'error': 'Model path not found'
+                        'error': 'Model path not found or invalid HuggingFace ID'
                     })
                     return
                 model_name = model_path
@@ -820,6 +915,38 @@ def handle_set_working_dir(data):
         emit('config_error', {'message': 'Invalid directory'})
 
 # API Routes
+@app.route('/api/hf/search', methods=['GET'])
+@log_request
+def hf_search():
+    query = request.args.get('q', '')
+    if not query:
+        return jsonify([])
+
+    try:
+        from huggingface_hub import HfApi
+        api = HfApi()
+        # Search for models with the query, filtered by library and task
+        models = api.list_models(
+            search=query,
+            filter="text-generation",
+            sort="downloads",
+            direction=-1,
+            limit=20
+        )
+
+        results = []
+        for m in models:
+            results.append({
+                'id': m.modelId,
+                'downloads': getattr(m, 'downloads', 0),
+                'likes': getattr(m, 'likes', 0),
+                'updated': getattr(m, 'lastModified', '')
+            })
+        return jsonify(results)
+    except Exception as e:
+        print(f"❌ HF Search error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/models', methods=['GET'])
 @log_request
 def get_models():
@@ -1043,6 +1170,44 @@ def download_model(model_name):
         except:
             pass
 
+@app.route('/api/vram/load', methods=['POST'])
+@log_request
+def vram_load():
+    data = request.get_json(silent=True) or {}
+    model_id = data.get('model_identifier')
+
+    if model_id.startswith('merged:'):
+        model_name = os.path.join(get_work_path(MERGED_FOLDER), model_id.replace('merged:', ''))
+    elif model_id.startswith('custom:'):
+        model_name = model_id.replace('custom:', '')
+    else:
+        model_name = model_id
+
+    lora_name = data.get('lora_name')
+    lora_path = None
+    if lora_name and lora_name != "none":
+        lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name, "lora_adapter")
+        if not os.path.exists(lora_path):
+            lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name)
+
+    vram_manager.start_worker(model_name, lora_path)
+    return jsonify({'success': True, 'status': 'loading'})
+
+@app.route('/api/vram/unload', methods=['GET'])
+@log_request
+def vram_unload():
+    vram_manager.stop_worker()
+    return jsonify({'success': True, 'status': 'idle'})
+
+@app.route('/api/vram/status', methods=['GET'])
+@log_request
+def vram_status_api():
+    return jsonify({
+        'status': vram_manager.status,
+        'model': vram_manager.current_model,
+        'lora': vram_manager.current_lora
+    })
+
 @app.route('/api/start_inference', methods=['POST'])
 @log_request
 def start_inference():
@@ -1050,36 +1215,38 @@ def start_inference():
         return jsonify({'error': 'No working directory'}), 400
 
     data = request.get_json(silent=True) or {}
-    model_id = data.get('model_identifier')
+    messages = data.get('messages')
 
-    # Handle Merged Models
+    if not messages:
+        return jsonify({'error': 'No messages provided'}), 400
+
+    # If vram worker is ready, use it
+    if vram_manager.status == "ready":
+        success = vram_manager.chat(messages)
+        return jsonify({'success': success, 'persistent': True})
+
+    # Fallback to subprocess (existing logic)
+    model_id = data.get('model_identifier')
     if model_id.startswith('merged:'):
         model_name = os.path.join(get_work_path(MERGED_FOLDER), model_id.replace('merged:', ''))
-    # Handle custom models
     elif model_id.startswith('custom:'):
         model_name = model_id.replace('custom:', '')
     else:
         model_name = model_id
 
-    lora_name = data.get('lora_name') # Optional
-    messages = data.get('messages') # List of messages
+    lora_name = data.get('lora_name')
     socket_id = data.get('socket_id')
-
-    if not messages:
-        return jsonify({'error': 'No messages provided'}), 400
-
     lora_path = None
     if lora_name and lora_name != "none":
         lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name, "lora_adapter")
         if not os.path.exists(lora_path):
-            # Try direct path
             lora_path = os.path.join(get_work_path(OUTPUT_FOLDER), lora_name)
 
     thread = InferenceThread(socket_id, model_name, lora_path, messages)
     socketio.start_background_task(thread.run)
     active_threads[thread.session_id] = thread
 
-    return jsonify({'success': True, 'session_id': thread.session_id})
+    return jsonify({'success': True, 'session_id': thread.session_id, 'persistent': False})
 
 @app.route('/api/start_training', methods=['POST'])
 @log_request
